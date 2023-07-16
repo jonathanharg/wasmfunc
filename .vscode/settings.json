@@ -1,0 +1,5 @@
+{
+    "python.analysis.typeCheckingMode": "basic",
+    "python.analysis.useImportHeuristic": true,
+    "python.analysis.extraPaths": ["../binaryen.py"]
+}
