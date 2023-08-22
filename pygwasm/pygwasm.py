@@ -19,6 +19,7 @@ from typing import Any
 import symtable
 import binaryen
 
+
 class FileVisitor(ast.NodeVisitor):
     def visit_Module(self, node: Module):
         print(f"Creating WASM Module")
