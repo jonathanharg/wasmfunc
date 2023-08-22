@@ -1,5 +1,6 @@
 import pygwasm
 
+
 @pygwasm.func
 def fib(n):
     """Print the Fibonacci series up to n."""

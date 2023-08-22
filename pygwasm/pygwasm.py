@@ -196,38 +196,3 @@ class FunctionVisitor(ast.NodeTransformer):
         )
         raise NotImplementedError
         # return super().generic_visit(node)
-
-
-if __name__ == "__main__":
-    import sys
-
-    # TODO: Handle Error cases
-
-    for path in sys.argv[1:]:
-        with open(path, "r") as file:
-            print(f"Compiling {path}...")
-            code = file.read()
-            tree = ast.parse(code, filename=path, type_comments=True)
-            # print(ast.dump(tree, indent=2))
-            table = symtable.symtable(code, file.name, "exec")
-            print(table)
-            # table.lookup("add").get_namespace()
-            visitor = FileVisitor()
-            visitor.visit(tree)
-
-else:
-
-    def func(python_function):
-        def wrapper(*args, **kwargs):
-            # Do something before calling the wrapped function
-            print("Before calling the wrapped function")
-
-            # Call the wrapped function
-            result = python_function(*args, **kwargs)
-
-            # Do something after calling the wrapped function
-            print("After calling the wrapped function")
-
-            return result
-
-        return wrapper
