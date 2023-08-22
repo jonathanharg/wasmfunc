@@ -1,5 +1,11 @@
 {
     "python.analysis.typeCheckingMode": "basic",
     "python.analysis.useImportHeuristic": true,
-    "python.analysis.extraPaths": ["../binaryen.py"]
+    "python.analysis.extraPaths": [
+        "../binaryen.py"
+    ],
+    "[python]": {
+        "editor.defaultFormatter": "ms-python.black-formatter"
+    },
+    "python.formatting.provider": "none"
 }

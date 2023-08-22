@@ -1,20 +1,22 @@
 import pygwasm
 
-# @pygwasm.func
+@pygwasm.func
 def fib(n):
     """Print the Fibonacci series up to n."""
     a, b = 0, 1
     while b < n:
-        print(b, end=' ')
+        print(b, end=" ")
         a, b = b, a + b
 
     print()
 
+
 # @pygwasm.func
 def hello():
     message: str
-    message = "Hello world" 
+    message = "Hello world"
     print(message)
+
 
 @pygwasm.func
 def basic():
@@ -23,6 +25,7 @@ def basic():
     a = 1
     b = 2
     return a + b
+
 
 if __name__ == "__main__":
     # hello()
