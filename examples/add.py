@@ -17,9 +17,3 @@ def fib(n: pygwasm.i32) -> pygwasm.i32:
         return n
     else:
         return fib(n - 1) + fib(n - 2)
-
-
-def standard(x):
-    ajsldfj = 5
-    print("AJLSDJFLKSJF")
-    ajsldfj += 1

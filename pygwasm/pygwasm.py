@@ -15,12 +15,9 @@ from _ast import (
     alias,
 )
 import ast
-from typing import Any, TypeAlias
+from typing import Any
 import symtable
 import binaryen
-
-i32: TypeAlias = int
-
 
 class FileVisitor(ast.NodeVisitor):
     def visit_Module(self, node: Module):
