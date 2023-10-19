@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 from _ast import (
-    Add,
     Attribute,
     BinOp,
     Call,
@@ -9,10 +8,10 @@ from _ast import (
     FunctionDef,
     If,
     Import,
+    ImportFrom,
     Module,
     Name,
     Return,
-    alias,
 )
 import ast
 from typing import Any
@@ -21,62 +20,74 @@ import binaryen
 
 
 class FileVisitor(ast.NodeVisitor):
-    def visit_Module(self, node: Module):
-        print(f"Creating WASM Module")
+    def __init__(self, symbol_table: symtable.SymbolTable) -> None:
+        self.symbol_table = symbol_table
         self.module = binaryen.Module()
-        super().generic_visit(node)
-        self.module.write_text("out")
-
-    def visit_FunctionDef(self, node: FunctionDef):
-        # TODO: This checking method is janky
-        if not any([dec.value.id == "pygwasm" for dec in node.decorator_list]):
-            print(f"Ignoring non WASM function {node.name}")
-            return
-        print(f"Creating WASM Function {node.name}")
-        code = ast.unparse(node)
-        stbl = symtable.symtable(code, node.name, "exec")
-        print(stbl)
-        print(ast.dump(node, indent=2))
-        func_visitor = FunctionVisitor(self.module)
-        func_visitor.visit(node)
-        # return super().generic_visit(node)
-
-    def visit_Import(self, node: Import) -> Any:
-        return super().generic_visit(node)
-
-    def visit_alias(self, node: alias) -> Any:
-        return super().generic_visit(node)
-
-    def generic_visit(self, node):
-        print(
-            f"Node of type {node.__class__.__name__} is not supported by pygwams. Line number {node.lineno if hasattr(node, 'lineno') else '?'}"
-        )
-        return super().generic_visit(node)
-
-
-class FunctionVisitor(ast.NodeTransformer):
-    def __init__(self, module: binaryen.Module):
-        self.module = module
+        self.module_aliases = []
+        self.object_aliases = {}
         self.top_level_function = True
         self.var_stack = []
+        super().__init__()
 
-    def visit_FunctionDef(self, node: FunctionDef) -> Any:
+    def get_binaryen_type(self, node: Attribute | Name) -> binaryen.types.BinaryenType: # type: ignore
+        """Convert a pygwasm annotation e.g. x:pygwasm.i32 to a binaryen type object e.g: binaryen.i32()
+        """
+        # Annotations are either Attribute(Name) e.g. pygwasm.i32
+        # Or are Name e.g. by using `from pygwasm import i32`
+        # Note that both the Attribute and Name can be aliased because of `import pygwasm as p`
+        # Or `from pygwasm import i32 as integer32`
+
+        if isinstance(node, Name):
+            type_name = self.object_aliases[node.id]
+            assert type_name is not None
+            binaryen_type = getattr(binaryen, type_name)
+            return binaryen_type
+            
+        if isinstance(node, Attribute) and isinstance(node.value, Name):
+            assert node.value.id in self.module_aliases
+            type_name = node.attr
+            binaryen_type = getattr(binaryen, type_name)
+            return binaryen_type
+
+    def visit_Module(self, node: Module):
+        print("Creating WASM Module")
+        super().generic_visit(node)
+
+    def visit_FunctionDef(self, node: FunctionDef):
+        """ Check if function has the binaryen decorator @binaryen.func
+        """
+        contains_wasm = False
+        for decorator in node.decorator_list:
+            if isinstance(decorator, Attribute):
+                assert isinstance(decorator.value, Name)
+                if decorator.value.id in self.module_aliases and decorator.attr == "func":
+                    contains_wasm = True
+                    break
+            if isinstance(decorator, Name):
+                if self.object_aliases[decorator.id] == "func":
+                    contains_wasm = True
+                    break
+
+        if not contains_wasm:
+            print(f"Skipping non WASM Function {node.name}")
+            return
+
+        print(f"Creating WASM Function {node.name}")
+
+        # REFACTOR, THIS IS MERGED FROM THE OLD FUNCTION VISITOR, CODE FROM BELOW THIS POINT WILL NOT WORK
         assert self.top_level_function
         self.top_level_function = False
         name = bytes(node.name, "ascii")
         argument_types = []
         for argument in node.args.args:
-            assert argument.annotation.value.id == "pygwasm"
-            type_name = argument.annotation.attr
-            # name = argument.arg
-            type_proper = getattr(binaryen.types, type_name)
-            self.var_stack.append((argument.arg, type_proper))
-            argument_types.append(type_proper)
-        assert node.returns.value.id == "pygwasm"
-        return_type = getattr(binaryen.types, node.returns.attr)
+            argument_type = self.get_binaryen_type(argument.annotation)
+            self.var_stack.append((argument.arg, argument_type))
+            argument_types.append(argument_type)
+
+        return_type = self.get_binaryen_type(node.returns)
         body = self.module.block(None, [], return_type)
         self.module.add_function(
-            name, binaryen.type_create(argument_types), return_type, [], body
+            name, binaryen.types.create(argument_types), return_type, [], body
         )
 
         for body_node in node.body:
@@ -86,12 +97,38 @@ class FunctionVisitor(ast.NodeTransformer):
                     body.append_child(expression)
                 else:
                     print("Non binaryen output of node!")
-        print("Done")
         self.module.add_function_export(name, name)
-        self.module.optimize()
-        print("Printing")
-        self.module.print()
-        print(f"Is valid: {self.module.validate()}")
+        print(f"Finished compiling {node.name}, valid: {self.module.validate()}")
+        self.top_level_function = True
+        self.var_stack = []
+
+    def visit_Import(self, node: Import) -> Any:
+        # Record if pygwasm is imported, or if its imported under an alias
+        for module in node.names:
+            print(f"Found import for {module.name}")
+            if module.name == "pygwasm":
+                if module.asname is not None:
+                    print(f"Appending alias {module.asname}")
+                    self.module_aliases.append(module.asname)
+                else:
+                    print("Appending default alias")
+                    self.module_aliases.append("pygwasm")
+        return
+
+    def visit_ImportFrom(self, node: ImportFrom) -> Any:
+        # Record if the pygwasm decorator is imported, or if its imported under an alias
+        if node.module != "pygwasm":
+            print("Found non binaryen import from")
+            return
+        for function in node.names:
+            if function.asname is not None:
+                # Here we may have clashes. e.g. import i32 as integer and then reimports i64 as integer
+                # This will cause issues, but if you're is doing this, you have bigger problems going on.
+                self.object_aliases[function.asname] = function.name
+            else:
+                # Add the default name if no alias is specified
+                self.object_aliases[function.name] = function.name
+        return
 
     def visit_Name(self, node: Name) -> binaryen.Expression | None:
         # TODO: This is janky, use the built in python module
@@ -134,16 +171,18 @@ class FunctionVisitor(ast.NodeTransformer):
         print("Visiting BinOp")
         left = super().visit(node.left)
         right = super().visit(node.right)
-        if isinstance(node.op, ast.Add):
-            if left.get_type() == right.get_type() == binaryen.i32:
-                # TODO: Fix lib BinaryenAddInt32
-                print("Replacing BinOp with binaryen type")
-                return self.module.binary(binaryen.lib.BinaryenAddInt32(), left, right)
-        elif isinstance(node.op, ast.Sub):
-            if left.get_type() == right.get_type() == binaryen.i32:
-                # TODO: Fix lib BinaryenAddInt32
-                print("Replacing BinOp with binaryen type")
-                return self.module.binary(binaryen.lib.BinaryenSubInt32(), left, right)
+        if left.get_type() == right.get_type() == binaryen.i32:
+            if isinstance(node.op, ast.Add):
+                return self.module.binary(binaryen.operations.AddInt32(), left, right)
+            if isinstance(node.op, ast.Sub):
+                return self.module.binary(binaryen.operations.SubInt32(), left, right)
+            if isinstance(node.op, ast.Mult):
+                return self.module.binary(binaryen.operations.MulInt32(), left, right)
+            if isinstance(node.op, ast.FloorDiv):
+                # TODO: Assuming this is signed division, does this work? should this be unsigned?
+                return self.module.binary(binaryen.operations.DivSInt32(), left, right)
+            if isinstance(node.op, ast.Mod):
+                return self.module.binary(binaryen.operations.RemSInt32(), left, right)
         else:
             raise NotImplementedError
 
@@ -187,10 +226,9 @@ class FunctionVisitor(ast.NodeTransformer):
             args.append(arg_exp)
         # TODO: Actually find out the return type dont just hard code it lol
         return self.module.call(name, args, binaryen.i32)
-
+    
     def generic_visit(self, node):
         print(
-            f"FUNCTION: Node of type {node.__class__.__name__} is not supported by pygwams. Line number {node.lineno if hasattr(node, 'lineno') else '?'}"
+            f"Node of type {node.__class__.__name__} is not supported by pygwasm. Line number {node.lineno if hasattr(node, 'lineno') else '?'}"
         )
-        raise NotImplementedError
-        # return super().generic_visit(node)
+        return super().generic_visit(node)

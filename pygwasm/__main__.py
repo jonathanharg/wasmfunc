@@ -2,17 +2,18 @@ import sys
 from .pygwasm import FileVisitor
 import ast
 import symtable
+import os
 
-# TODO: Handle Error cases
-
-for path in sys.argv[1:]:
-    with open(path, "r") as file:
-        print(f"Compiling {path}...")
+for string_path in sys.argv[1:]:
+    with open(string_path, "r", encoding="utf-8") as file:
+        print(f"Compiling {string_path}...")
         code = file.read()
-        tree = ast.parse(code, filename=path, type_comments=True)
-        # print(ast.dump(tree, indent=2))
-        table = symtable.symtable(code, file.name, "exec")
-        print(table)
-        # table.lookup("add").get_namespace()
-        visitor = FileVisitor()
+        path =  os.path.split(string_path)
+        filename = path[-1]
+        tree = ast.parse(code, filename=filename, type_comments=True)
+        symbol_table = symtable.symtable(code, filename, "exec")
+        visitor = FileVisitor(symbol_table)
         visitor.visit(tree)
+        visitor.module.optimize()
+        # visitor.module.write_binary(filename)
+        visitor.module.print()
