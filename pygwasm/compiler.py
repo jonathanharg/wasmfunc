@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 from _ast import (
+    AST,
     Attribute,
     BinOp,
     Call,
@@ -19,7 +20,7 @@ import symtable
 import binaryen
 
 
-class FileVisitor(ast.NodeVisitor):
+class Compiler(ast.NodeVisitor):
     def __init__(self, symbol_table: symtable.SymbolTable) -> None:
         self.symbol_table = symbol_table
         self.module = binaryen.Module()
@@ -28,6 +29,9 @@ class FileVisitor(ast.NodeVisitor):
         self.top_level_function = True
         self.var_stack = []
         super().__init__()
+    
+    def compile(self, node: AST) -> None:
+        return self.visit(node)
 
     def get_binaryen_type(self, node: Attribute | Name) -> binaryen.types.BinaryenType: # type: ignore
         """Convert a pygwasm annotation e.g. x:pygwasm.i32 to a binaryen type object e.g: binaryen.i32()
