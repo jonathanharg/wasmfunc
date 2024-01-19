@@ -22,11 +22,13 @@ import binaryen
 
 class Compiler(ast.NodeVisitor):
     def __init__(self, symbol_table: symtable.SymbolTable) -> None:
+        # TODO: DO WE EVEN USE SYMBOL_TABLE? DO WE NEED TO PASS IT AS ARGS
         self.symbol_table = symbol_table
         self.module = binaryen.Module()
         self.module_aliases = []
         self.object_aliases = {}
         self.top_level_function = True
+        self.wasm_functions = []
         self.var_stack = []
         super().__init__()
     
@@ -77,21 +79,26 @@ class Compiler(ast.NodeVisitor):
             return
 
         print(f"Creating WASM Function {node.name}")
+        self.wasm_functions.append(node)
 
-        # REFACTOR, THIS IS MERGED FROM THE OLD FUNCTION VISITOR, CODE FROM BELOW THIS POINT WILL NOT WORK
+        # TODO: I Don't even know if we need this
+        # TODO: Make sure we support/don't support inline funcitons/calling functions in functions
         assert self.top_level_function
         self.top_level_function = False
+
         name = bytes(node.name, "ascii")
-        argument_types = []
+
+        function_argument_types = []
         for argument in node.args.args:
             argument_type = self.get_binaryen_type(argument.annotation)
             self.var_stack.append((argument.arg, argument_type))
-            argument_types.append(argument_type)
+            function_argument_types.append(argument_type)
 
         return_type = self.get_binaryen_type(node.returns)
+
         body = self.module.block(None, [], return_type)
         self.module.add_function(
-            name, binaryen.types.create(argument_types), return_type, [], body
+            name, binaryen.types.create(function_argument_types), return_type, [], body
         )
 
         for body_node in node.body:
@@ -100,9 +107,12 @@ class Compiler(ast.NodeVisitor):
                 if isinstance(expression, binaryen.expression.Expression):
                     body.append_child(expression)
                 else:
-                    print("Non binaryen output of node!")
+                    print("Error: Non binaryen output of node!")
+
         self.module.add_function_export(name, name)
         print(f"Finished compiling {node.name}, valid: {self.module.validate()}")
+
+        # TODO: Do we need this?
         self.top_level_function = True
         self.var_stack = []
 
@@ -136,7 +146,6 @@ class Compiler(ast.NodeVisitor):
 
     def visit_Name(self, node: Name) -> binaryen.Expression | None:
         # TODO: This is janky, use the built in python module
-        print("Visiting Name")
         (index, var_type) = next(
             ((i, v[1]) for i, v in enumerate(self.var_stack) if v[0] == node.id),
             (None, None),
@@ -166,13 +175,12 @@ class Compiler(ast.NodeVisitor):
         raise NotImplementedError
 
     def visit_Return(self, node: Return) -> Any:
-        print("Visiting Return")
+        print("-- Visiting Return")
         value = super().visit(node.value)
-        print("Replaced Return with binaryen type")
         return self.module.Return(value)
 
     def visit_BinOp(self, node: BinOp) -> Any:
-        print("Visiting BinOp")
+        print("-- Visiting BinOp")
         left = super().visit(node.left)
         right = super().visit(node.right)
         if left.get_type() == right.get_type() == binaryen.i32:
@@ -183,7 +191,7 @@ class Compiler(ast.NodeVisitor):
             if isinstance(node.op, ast.Mult):
                 return self.module.binary(binaryen.operations.MulInt32(), left, right)
             if isinstance(node.op, ast.FloorDiv):
-                # TODO: Assuming this is signed division, does this work? should this be unsigned?
+                # TODO: Assuming signed numbers, should probably bounds check this?
                 return self.module.binary(binaryen.operations.DivSInt32(), left, right)
             if isinstance(node.op, ast.Mod):
                 return self.module.binary(binaryen.operations.RemSInt32(), left, right)
@@ -191,7 +199,7 @@ class Compiler(ast.NodeVisitor):
             raise NotImplementedError
 
     def visit_If(self, node: If) -> Any:
-        print("Visiting If")
+        print("-- Visiting If")
         condition = super().visit(node.test)
         if_true = self.module.block(None, [], binaryen.auto)
         if_false = self.module.block(None, [], binaryen.auto)
@@ -214,7 +222,7 @@ class Compiler(ast.NodeVisitor):
             left = super().visit(node.left)
             right = super().visit(node.comparators[0])
             if left.get_type() == right.get_type() == binaryen.i32:
-                return self.module.binary(binaryen.lib.BinaryenLeSInt32(), left, right)
+                return self.module.binary(binaryen.operations.LeSInt32(), left, right)
             else:
                 raise NotImplementedError
         else:
