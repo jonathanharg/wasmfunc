@@ -28,7 +28,7 @@ class Compiler(ast.NodeVisitor):
         self.module_aliases = []
         self.object_aliases = {}
         self.top_level_function = True
-        self.wasm_functions = []
+        self.top_level_wasm_functions = []
         self.var_stack = []
         super().__init__()
     
@@ -79,7 +79,7 @@ class Compiler(ast.NodeVisitor):
             return
 
         print(f"Creating WASM Function {node.name}")
-        self.wasm_functions.append(node)
+        self.top_level_wasm_functions.append(node)
 
         # TODO: I Don't even know if we need this
         # TODO: Make sure we support/don't support inline funcitons/calling functions in functions

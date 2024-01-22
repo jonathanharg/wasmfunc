@@ -11,5 +11,6 @@ description = "A WebAssembly compiler for Python"
 requires-python = ">=3.11"
 dependencies = [
     'binaryenpy >= 0.0.2',
+    # TODO: Dev dependencies: wasmtime, pytest
 ]
 version = "0.0.1"
