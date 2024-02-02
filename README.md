@@ -5,3 +5,5 @@ PyGWasm (Python Generates Wasm) is a Python to WebAssembly Compiler built for co
 ## Installation
 
 ## Test
+
+python -m pytest

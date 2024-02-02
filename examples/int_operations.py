@@ -23,3 +23,9 @@ def remainder() -> pygwasm.i32:
 # @pygwasm.func
 # def exponentiation() -> pygwasm.i32:
 #     return 2 ** 3
+
+testinputs_addition = [()]
+testinputs_subtraction = [()]
+testinputs_multiplication = [()]
+testinputs_division = [()]
+testinputs_remainder = [()]
