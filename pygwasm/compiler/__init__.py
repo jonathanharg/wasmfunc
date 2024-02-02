@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from _ast import (
     AST,
+    Assign,
     Attribute,
     BinOp,
     Call,
@@ -19,6 +20,7 @@ from typing import Any
 import symtable
 import binaryen
 
+# NOTE: Access super() with super(type(self), self)
 
 class Compiler(ast.NodeVisitor):
     def __init__(self, symbol_table: symtable.SymbolTable) -> None:
@@ -30,6 +32,7 @@ class Compiler(ast.NodeVisitor):
         self.top_level_function = True
         self.top_level_wasm_functions = []
         self.var_stack = []
+        self.debug_whole_ast = None
         super().__init__()
     
     def compile(self, node: AST) -> None:
@@ -57,6 +60,15 @@ class Compiler(ast.NodeVisitor):
 
     def visit_Module(self, node: Module):
         print("Creating WASM Module")
+        self.debug_whole_ast = node
+        super().generic_visit(node)
+
+    def visit_Assign(self, node: Assign) -> Any:
+
+        if self.top_level_function:
+            # Were in a top level global variable definition: ignore for now
+            return
+
         super().generic_visit(node)
 
     def visit_FunctionDef(self, node: FunctionDef):
@@ -116,63 +128,9 @@ class Compiler(ast.NodeVisitor):
         self.top_level_function = True
         self.var_stack = []
 
-    def visit_Import(self, node: Import) -> Any:
-        # Record if pygwasm is imported, or if its imported under an alias
-        for module in node.names:
-            print(f"Found import for {module.name}")
-            if module.name == "pygwasm":
-                if module.asname is not None:
-                    print(f"Appending alias {module.asname}")
-                    self.module_aliases.append(module.asname)
-                else:
-                    print("Appending default alias")
-                    self.module_aliases.append("pygwasm")
-        return
+    from ._imports import visit_Import, visit_ImportFrom
 
-    def visit_ImportFrom(self, node: ImportFrom) -> Any:
-        # Record if the pygwasm decorator is imported, or if its imported under an alias
-        if node.module != "pygwasm":
-            print("Found non binaryen import from")
-            return
-        for function in node.names:
-            if function.asname is not None:
-                # Here we may have clashes. e.g. import i32 as integer and then reimports i64 as integer
-                # This will cause issues, but if you're is doing this, you have bigger problems going on.
-                self.object_aliases[function.asname] = function.name
-            else:
-                # Add the default name if no alias is specified
-                self.object_aliases[function.name] = function.name
-        return
-
-    def visit_Name(self, node: Name) -> binaryen.Expression | None:
-        # TODO: This is janky, use the built in python module
-        (index, var_type) = next(
-            ((i, v[1]) for i, v in enumerate(self.var_stack) if v[0] == node.id),
-            (None, None),
-        )
-        if isinstance(node.ctx, ast.Load):
-            assert index is not None
-            print("Replaced Name with binaryen type")
-            return self.module.local_get(index, var_type)
-        if isinstance(node.ctx, ast.Store):
-            # if var is None:
-            raise NotImplementedError
-        if isinstance(node.ctx, ast.Del):
-            raise NotImplementedError
-
-    def visit_Constant(self, node: Constant) -> Any:
-        if node.value is None:
-            raise NotImplementedError
-        if isinstance(node.value, str):
-            raise NotImplementedError
-        if isinstance(node.value, int):
-            # TODO: Should probably bounds check this!!!
-            return self.module.const(binaryen.lib.BinaryenLiteralInt32(node.value))
-        if isinstance(node.value, float):
-            raise NotImplementedError
-        # From the docs:
-        # The values represented can be simple types such as a number, string or None, but also immutable container types (tuples and frozensets) if all of their elements are constant.
-        raise NotImplementedError
+    from ._variables import visit_Constant, visit_Name
 
     def visit_Return(self, node: Return) -> Any:
         print("-- Visiting Return")
@@ -230,6 +188,7 @@ class Compiler(ast.NodeVisitor):
 
     def visit_Call(self, node: Call) -> Any:
         if len(node.keywords) > 0:
+            print("Pygwasm does not support keyword arguments!")
             raise NotImplementedError
         name = bytes(node.func.id, "ascii")
         args = []
