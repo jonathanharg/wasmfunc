@@ -22,7 +22,7 @@ import binaryen
 
 # NOTE: Access super() with super(type(self), self)
 
-class Compiler(ast.NodeVisitor):
+class Compiler(ast.NodeTransformer):
     def __init__(self, symbol_table: symtable.SymbolTable) -> None:
         # TODO: DO WE EVEN USE SYMBOL_TABLE? DO WE NEED TO PASS IT AS ARGS
         self.symbol_table = symbol_table
@@ -45,18 +45,17 @@ class Compiler(ast.NodeVisitor):
         # Or are Name e.g. by using `from pygwasm import i32`
         # Note that both the Attribute and Name can be aliased because of `import pygwasm as p`
         # Or `from pygwasm import i32 as integer32`
-
-        if isinstance(node, Name):
-            type_name = self.object_aliases[node.id]
-            assert type_name is not None
-            binaryen_type = getattr(binaryen, type_name)
-            return binaryen_type
-            
-        if isinstance(node, Attribute) and isinstance(node.value, Name):
-            assert node.value.id in self.module_aliases
-            type_name = node.attr
-            binaryen_type = getattr(binaryen, type_name)
-            return binaryen_type
+        match node:
+            case ast.Name():
+                type_name = self.object_aliases[node.id]
+                assert type_name is not None
+                binaryen_type = getattr(binaryen, type_name)
+                return binaryen_type
+            case ast.Attribute(value=ast.Name()):
+                assert node.value.id in self.module_aliases
+                type_name = node.attr
+                binaryen_type = getattr(binaryen, type_name)
+                return binaryen_type
 
     def visit_Module(self, node: Module):
         print("Creating WASM Module")
@@ -64,7 +63,6 @@ class Compiler(ast.NodeVisitor):
         super().generic_visit(node)
 
     def visit_Assign(self, node: Assign) -> Any:
-
         if self.top_level_function:
             # Were in a top level global variable definition: ignore for now
             return
@@ -141,20 +139,25 @@ class Compiler(ast.NodeVisitor):
         print("-- Visiting BinOp")
         left = super().visit(node.left)
         right = super().visit(node.right)
-        if left.get_type() == right.get_type() == binaryen.i32:
-            if isinstance(node.op, ast.Add):
+        # TODO: Temp only support i32
+
+        if not (left.get_type() == right.get_type() == binaryen.i32):
+            raise NotImplementedError
+
+        match node.op:
+            case ast.Add():
                 return self.module.binary(binaryen.operations.AddInt32(), left, right)
-            if isinstance(node.op, ast.Sub):
+            case ast.Sub():
                 return self.module.binary(binaryen.operations.SubInt32(), left, right)
-            if isinstance(node.op, ast.Mult):
+            case ast.Mult():
                 return self.module.binary(binaryen.operations.MulInt32(), left, right)
-            if isinstance(node.op, ast.FloorDiv):
+            case ast.FloorDiv():
                 # TODO: Assuming signed numbers, should probably bounds check this?
                 return self.module.binary(binaryen.operations.DivSInt32(), left, right)
-            if isinstance(node.op, ast.Mod):
+            case ast.Mod():
                 return self.module.binary(binaryen.operations.RemSInt32(), left, right)
-        else:
-            raise NotImplementedError
+            case _:
+                raise NotImplementedError
 
     def visit_If(self, node: If) -> Any:
         print("-- Visiting If")
@@ -174,17 +177,40 @@ class Compiler(ast.NodeVisitor):
 
     def visit_Compare(self, node: Compare) -> Any:
         if len(node.comparators) > 1 or len(node.ops) > 1:
+            # TODO: Supported chained comparisons
+            print("Error: Chained comparisons e.g. 1 <= a < 10 are not currently supported. Please use brackets.")
             raise NotImplementedError
+        
+        left = super().visit(node.left)
+        right = super().visit(node.comparators[0])
 
-        if isinstance(node.ops[0], ast.LtE):
-            left = super().visit(node.left)
-            right = super().visit(node.comparators[0])
-            if left.get_type() == right.get_type() == binaryen.i32:
-                return self.module.binary(binaryen.operations.LeSInt32(), left, right)
-            else:
-                raise NotImplementedError
-        else:
+        if not (left.get_type() == right.get_type() == binaryen.i32):
             raise NotImplementedError
+        
+        # TODO: Don't assume signed
+        match node.ops[0]:
+            case ast.Eq():
+                return self.module.binary(binaryen.operations.EqInt32(), left, right)
+            case ast.NotEq():
+                return self.module.binary(binaryen.operations.NeInt32(), left, right)
+            case ast.Lt():
+                return self.module.binary(binaryen.operations.LtSInt32(), left, right)
+            case ast.LtE():
+                return self.module.binary(binaryen.operations.LeSInt32(), left, right)
+            case ast.Gt():
+                return self.module.binary(binaryen.operations.GtSInt32(), left, right)
+            case ast.GtE():
+                return self.module.binary(binaryen.operations.GeSInt32(), left, right)
+            case ast.Is():
+                raise NotImplementedError
+            case ast.IsNot():
+                raise NotImplementedError
+            case ast.In():
+                raise NotImplementedError
+            case ast.NotIn():
+                raise NotImplementedError
+            case _:
+                raise NotImplementedError
 
     def visit_Call(self, node: Call) -> Any:
         if len(node.keywords) > 0:
