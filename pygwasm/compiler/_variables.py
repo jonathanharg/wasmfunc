@@ -8,13 +8,14 @@ if TYPE_CHECKING:
 import binaryen
 
 def visit_Name(self: 'Compiler', node: Name) -> binaryen.Expression | None:
-    # TODO: This is janky, use the built in python module
-    (index, var_type) = next(
-        ((i, v[1]) for i, v in enumerate(self.var_stack) if v[0] == node.id),
-        (None, None),
-    )
+    var = self._get_local_by_name(node.id)
+
+    if var is None:
+        raise RuntimeError
+    
+    (index, var_type) = var
+
     if isinstance(node.ctx, Load):
-        assert index is not None
         print("Replaced Name with binaryen type")
         return self.module.local_get(index, var_type)
     if isinstance(node.ctx, Store):

@@ -20,3 +20,6 @@ class i32(PygwasmBaseType):
         pass
     def __sub__(self, y: Union["i32", int]) -> "i32":
         return self + y
+
+class none(PygwasmBaseType):
+    pass
