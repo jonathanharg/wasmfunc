@@ -1,25 +1,16 @@
-from typing import  Union, overload
+from typing import Protocol, Union, Protocol, Self, Union
 
-class PygwasmBaseType:
+class PygwasmBaseType(Protocol):
     pass
 
-class i32(PygwasmBaseType):
-    @overload
-    def __add__(self, y: int) -> "i32":
-        pass
-    @overload
-    def __add__(self, y: "i32") -> "i32":
-        pass
-    def __add__(self, y: Union["i32", int]) -> "i32":
-        return self + y
-    @overload
-    def __sub__(self, y: int) -> "i32":
-        pass
-    @overload
-    def __sub__(self, y: "i32") -> "i32":
-        pass
-    def __sub__(self, y: Union["i32", int]) -> "i32":
-        return self + y
+class i32(PygwasmBaseType, Protocol):
+    def __add__(self, __value: Union[Self, int], /) -> Self: ...
+    def __sub__(self, __value: Union[Self, int], /) -> Self: ...
+    def __lt__(self, __value: Union[Self, int], /) -> bool: ...
+    def __le__(self, __value: Union[Self, int], /) -> bool: ...
+    def __eq__(self, __value: Union[Self, int], /) -> bool: ...
+    def __gt__(self, __value: Union[Self, int], /) -> bool: ...
+
 
 class none(PygwasmBaseType):
     pass

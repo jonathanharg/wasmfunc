@@ -1,3 +1,6 @@
+/*.wasm
+/*.wat
+
 .vscode
 
 # Byte-compiled / optimized / DLL files

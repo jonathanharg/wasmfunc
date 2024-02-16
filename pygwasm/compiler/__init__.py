@@ -73,7 +73,7 @@ class Compiler(ast.NodeTransformer):
         print("Creating WASM Module")
         super().generic_visit(node)
 
-    def visit_Assign(self, node: Assign) -> Any:
+    def visit_Assign(self, node: Assign):
         if not self.in_wasm_function:
             # TODO: No globals atm
             return
@@ -89,10 +89,18 @@ class Compiler(ast.NodeTransformer):
             target_var = self._get_local_by_name(target.id)
 
             if target_var is None:
-                # TODO: Better error messages
-                raise RuntimeError(
-                    "Initialising a variable without a type. Use x: i32 = 1 instead of x = 1."
-                )
+                # We are not reassigning to a variable, but creating a new one
+                # Only do this if we can work out the type of the value
+
+                if not isinstance(value, binaryen.Expression):
+                    # TODO: Better error messages
+                    raise RuntimeError(
+                        "Initialising a variable without a type. Use x: i32 = 1 instead of x = 1."
+                    )
+
+                computed_type = value.get_type()
+                new_id = self._create_local(target.id, computed_type)
+                target_var = (new_id, computed_type)
 
             (target_index, target_type) = target_var
 
@@ -101,7 +109,7 @@ class Compiler(ast.NodeTransformer):
 
         return self.module.block(None, expressions, binaryen.none)
 
-    def visit_AnnAssign(self, node: AnnAssign) -> Any:
+    def visit_AnnAssign(self, node: AnnAssign):
         if not self.in_wasm_function:
             # TODO: No globals atm
             return
@@ -202,7 +210,7 @@ class Compiler(ast.NodeTransformer):
             local_variable_types,
             body,
         )
-
+        self.module.auto_drop()
         self.module.add_function_export(name, name)
         print(f"Finished compiling {node.name}, valid: {self.module.validate()}")
         # self.module.print()
@@ -214,14 +222,14 @@ class Compiler(ast.NodeTransformer):
 
     from ._variables import visit_Constant, visit_Name
 
-    def visit_Return(self, node: Return) -> Any:
+    def visit_Return(self, node: Return):
         if not self.in_wasm_function:
             raise NotImplementedError
 
         value = super().visit(node.value)
         return self.module.Return(value)
 
-    def visit_BinOp(self, node: BinOp) -> Any:
+    def visit_BinOp(self, node: BinOp):
         if not self.in_wasm_function:
             raise NotImplementedError
 
@@ -258,7 +266,7 @@ class Compiler(ast.NodeTransformer):
             case _:
                 raise NotImplementedError
 
-    def visit_If(self, node: If) -> Any:
+    def visit_If(self, node: If):
         if not self.in_wasm_function:
             raise NotImplementedError
 
@@ -277,7 +285,40 @@ class Compiler(ast.NodeTransformer):
 
         return self.module.If(condition, if_true, if_false)
 
-    def visit_Compare(self, node: Compare) -> Any:
+    def visit_While(self, node: ast.While):
+        if not self.in_wasm_function:
+            raise NotImplementedError
+
+        if len(node.orelse) != 0:
+            raise NotImplementedError
+
+        loop_body_expressions = []
+        for python_exp in node.body:
+            wasm_exp = super().visit(python_exp)
+            loop_body_expressions.append(wasm_exp)
+
+        test = super().visit(node.test)
+        # TODO: Optimize this to a EQZ
+        true = self.module.const(binaryen.lib.BinaryenLiteralInt32(1))
+        break_if_test_fail = self.module.binary(
+            binaryen.operations.NeInt32(), test, true
+        )
+        check_condition = self.module.Break(b"while", break_if_test_fail, None)
+        jump_to_start = self.module.Break(b"loop", None, None)
+
+        inner_loop = self.module.block(
+            None,
+            [check_condition, *loop_body_expressions, jump_to_start],
+            binaryen.auto,
+        )
+
+        loop = self.module.loop(b"loop", inner_loop)
+
+        while_loop = self.module.block(b"while", [loop], binaryen.auto)
+
+        return while_loop
+
+    def visit_Compare(self, node: Compare):
         if len(node.comparators) > 1 or len(node.ops) > 1:
             # TODO: Supported chained comparisons
             print(
@@ -316,7 +357,7 @@ class Compiler(ast.NodeTransformer):
             case _:
                 raise NotImplementedError
 
-    def visit_Call(self, node: Call) -> Any:
+    def visit_Call(self, node: Call):
         if len(node.keywords) > 0:
             print("Pygwasm does not support keyword arguments!")
             raise NotImplementedError
@@ -329,7 +370,6 @@ class Compiler(ast.NodeTransformer):
         return self.module.call(name, args, binaryen.i32)
 
     def generic_visit(self, node):
-        print(
+        raise RuntimeError(
             f"Node of type {node.__class__.__name__} is not supported by pygwasm. Line number {node.lineno if hasattr(node, 'lineno') else '?'}"
         )
-        return super().generic_visit(node)

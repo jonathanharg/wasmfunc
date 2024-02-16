@@ -7,3 +7,5 @@ for string_path in sys.argv[1:]:
     compiler.module.optimize()
     filename = generate_output_name(string_path)
     compiler.module.write_binary(filename)
+    wat_filename = generate_output_name(string_path, False)
+    compiler.module.write_text(wat_filename)

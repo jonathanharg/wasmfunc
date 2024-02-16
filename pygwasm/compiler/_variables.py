@@ -16,7 +16,6 @@ def visit_Name(self: 'Compiler', node: Name) -> binaryen.Expression | None:
     (index, var_type) = var
 
     if isinstance(node.ctx, Load):
-        print("Replaced Name with binaryen type")
         return self.module.local_get(index, var_type)
     if isinstance(node.ctx, Store):
         raise NotImplementedError
