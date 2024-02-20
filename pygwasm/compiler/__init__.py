@@ -51,7 +51,7 @@ class Compiler(ast.NodeTransformer):
     def compile(self, node: AST) -> None:
         return self.visit(node)
 
-    def get_binaryen_type(self, node: Attribute | Name) -> binaryen.types.BinaryenType:  # type: ignore
+    def _get_binaryen_type(self, node: Attribute | Name) -> binaryen.types.BinaryenType:  # type: ignore
         """Convert a pygwasm annotation e.g. x:pygwasm.i32 to a binaryen type object e.g: binaryen.i32()"""
         # Annotations are either Attribute(Name) e.g. pygwasm.i32
         # Or are Name e.g. by using `from pygwasm import i32`
@@ -68,6 +68,126 @@ class Compiler(ast.NodeTransformer):
                 type_name = node.attr
                 binaryen_type = getattr(binaryen, type_name)
                 return binaryen_type
+
+    def _cast_numeric_to_matching(
+        self, left: binaryen.Expression, right: binaryen.Expression, lineno: int
+    ):
+        left_type = left.get_type()
+        right_type = right.get_type()
+        input_types = [left_type, right_type]
+
+        number_types = [binaryen.i32, binaryen.i64, binaryen.f32, binaryen.f64]
+        large_types = [binaryen.i64, binaryen.f64]
+        float_types = [binaryen.f32, binaryen.f64]
+
+        if any(map(lambda x: x not in number_types, input_types)):
+            raise RuntimeError("Unsupported types in number operation")
+
+        if left_type == right_type:
+            return (left, right)
+
+        print(f"Warning: performing runtime casting on line {lineno}")
+
+        large = any(map(lambda x: x in large_types, input_types))
+        floating = any(map(lambda x: x in float_types, input_types))
+
+        if floating:
+            target_type = binaryen.f64 if large else binaryen.f32
+        else:
+            target_type = binaryen.i64 if large else binaryen.i32
+
+        if left_type != target_type:
+            operation = self._get_numeric_conversion_op(left, target_type, lineno)
+            if operation is not None:
+                left = self.module.unary(operation, left)
+        if right_type != target_type:
+            operation = self._get_numeric_conversion_op(right, target_type, lineno)
+            if operation is not None:
+                right = self.module.unary(operation, right)
+
+        return (left, right)
+
+    def _get_numeric_conversion_op(
+        self,
+        target: binaryen.Expression,
+        convert_to: binaryen.types.BinaryenType,
+        lineno: int,
+    ):
+        from_type = target.get_type()
+        # TODO: Support S and U ints
+        # ATM Assume everything is S
+        match from_type:
+            case binaryen.i32:
+                match convert_to:
+                    case binaryen.i32:
+                        return None
+                    case binaryen.i64:
+                        raise binaryen.operations.ExtendS32Int64()
+                    case binaryen.f32:
+                        return binaryen.operations.ConvertSInt32ToFloat32()
+                    case binaryen.f64:
+                        raise binaryen.operations.ConvertSInt32ToFloat64()
+                    case _:
+                        raise RuntimeError(
+                            f"Can't convert from int32 to required type on line {lineno}"
+                        )
+            case binaryen.i64:
+                match convert_to:
+                    case binaryen.i32:
+                        raise binaryen.operations.WrapInt64()
+                    case binaryen.i64:
+                        return None
+                    case binaryen.f32:
+                        raise binaryen.operations.ConvertSInt64ToFloat32()
+                    case binaryen.f64:
+                        raise binaryen.operations.ConvertSInt64ToFloat64()
+                    case _:
+                        raise RuntimeError(
+                            f"Can't convert from int64 to required type on line {lineno}"
+                        )
+            case binaryen.f32:
+                match convert_to:
+                    case binaryen.i32:
+                        raise binaryen.operations.TruncSFloat32ToInt32()
+                    case binaryen.i64:
+                        raise binaryen.operations.TruncSFloat32ToInt64()
+                    case binaryen.f32:
+                        return None
+                    case binaryen.f64:
+                        return binaryen.operations.PromoteFloat32()
+                    case _:
+                        raise RuntimeError(
+                            f"Can't convert from float32 to required type on line {lineno}"
+                        )
+            case binaryen.f64:
+                match convert_to:
+                    case binaryen.i32:
+                        return binaryen.operations.TruncSFloat64ToInt32()
+                    case binaryen.i64:
+                        return binaryen.operations.TruncSFloat64ToInt64()
+                    case binaryen.f32:
+                        return binaryen.operations.DemoteFloat64()
+                    case binaryen.f64:
+                        return None
+                    case _:
+                        raise RuntimeError(
+                            f"Can't convert from float64 to required type on line {lineno}"
+                        )
+            case _:
+                raise RuntimeError(
+                    f"Unsupported type target in numeric conversion on line {lineno}"
+                )
+
+    def _cast_numeric_to_type(
+        self,
+        target: binaryen.Expression,
+        convert_to: binaryen.types.BinaryenType,
+        lineno: int,
+    ):
+        op = self._get_numeric_conversion_op(target, convert_to, lineno)
+        if op is None:
+            return target
+        return self.module.unary(op, target)
 
     def visit_Module(self, node: Module):
         print("Creating WASM Module")
@@ -124,7 +244,7 @@ class Compiler(ast.NodeTransformer):
 
         name = node.target.id
         value = self.visit(node.value) if node.value is not None else None
-        type_annotation = self.get_binaryen_type(node.annotation)
+        type_annotation = self._get_binaryen_type(node.annotation)
 
         # TODO: We assume the variable is local (TODO: Lookup in symtable)
         existing_variable = self._get_local_by_name(name)
@@ -146,7 +266,8 @@ class Compiler(ast.NodeTransformer):
             local_id = self._create_local(name, type_annotation)
 
         if value is not None:
-            return self.module.local_set(local_id, value)
+            cast_value = self._cast_numeric_to_type(value, type_annotation, node.lineno)
+            return self.module.local_set(local_id, cast_value)
 
         return self.module.nop()
 
@@ -184,11 +305,11 @@ class Compiler(ast.NodeTransformer):
 
         function_argument_types = []
         for argument in node.args.args:
-            argument_type = self.get_binaryen_type(argument.annotation)
+            argument_type = self._get_binaryen_type(argument.annotation)
             self._create_local(argument.arg, argument_type)
             function_argument_types.append(argument_type)
 
-        return_type = self.get_binaryen_type(node.returns)
+        return_type = self._get_binaryen_type(node.returns)
 
         body = self.module.block(None, [], return_type)
 
@@ -235,23 +356,70 @@ class Compiler(ast.NodeTransformer):
 
         left = super().visit(node.left)
         right = super().visit(node.right)
-        # TODO: Temp only support i32
-
-        if not (left.get_type() == right.get_type() == binaryen.i32):
-            raise NotImplementedError
+        (cast_left, cast_right) = self._cast_numeric_to_matching(
+            left, right, node.lineno
+        )
+        op_type = cast_left.get_type()
 
         match node.op:
             case ast.Add():
-                return self.module.binary(binaryen.operations.AddInt32(), left, right)
+                match op_type:
+                    case binaryen.i32:
+                        op = binaryen.operations.AddInt32()
+                    case binaryen.i64:
+                        op = binaryen.operations.AddInt64()
+                    case binaryen.f32:
+                        op = binaryen.operations.AddFloat32()
+                    case binaryen.f64:
+                        op = binaryen.operations.AddFloat64()
+                    case _:
+                        raise RuntimeError("Can't add non numeric wasm types")
             case ast.Sub():
-                return self.module.binary(binaryen.operations.SubInt32(), left, right)
+                match op_type:
+                    case binaryen.i32:
+                        op = binaryen.operations.SubInt32()
+                    case binaryen.i64:
+                        op = binaryen.operations.SubInt64()
+                    case binaryen.f32:
+                        op = binaryen.operations.SubFloat32()
+                    case binaryen.f64:
+                        op = binaryen.operations.SubFloat64()
+                    case _:
+                        raise RuntimeError("Can't subtract non numeric wasm types")
             case ast.Mult():
-                return self.module.binary(binaryen.operations.MulInt32(), left, right)
+                match op_type:
+                    case binaryen.i32:
+                        op = binaryen.operations.MulInt32()
+                    case binaryen.i64:
+                        op = binaryen.operations.MulInt64()
+                    case binaryen.f32:
+                        op = binaryen.operations.MulFloat32()
+                    case binaryen.f64:
+                        op = binaryen.operations.MulFloat64()
+                    case _:
+                        raise RuntimeError("Can't multiply non numeric wasm types")
             case ast.Mod():
-                # TODO: Assuming signed numbers, should probably bounds check this?
-                return self.module.binary(binaryen.operations.RemSInt32(), left, right)
+                match op_type:
+                    # TODO: Assuming signed
+                    case binaryen.i32:
+                        op = binaryen.operations.RemSInt32()
+                    case binaryen.i64:
+                        op = binaryen.operations.RemSInt64()
+                    case _:
+                        raise RuntimeError("Can't do modulus on non integer wasm types")
             case ast.FloorDiv():
-                return self.module.binary(binaryen.operations.DivSInt32(), left, right)
+                match op_type:
+                    # TODO: Assuming signed
+                    case binaryen.i32:
+                        op = binaryen.operations.DivSInt32()
+                    case binaryen.i64:
+                        op = binaryen.operations.DivSInt64()
+                    case binaryen.f32:
+                        op = binaryen.operations.DivFloat32()
+                    case binaryen.f64:
+                        op = binaryen.operations.DivFloat64()
+                    case _:
+                        raise RuntimeError("Can't multiply non numeric wasm types")
             case (
                 ast.MatMult()
                 | ast.Div()
@@ -265,6 +433,8 @@ class Compiler(ast.NodeTransformer):
                 raise NotImplementedError
             case _:
                 raise NotImplementedError
+
+        return self.module.binary(op, cast_left, cast_right)
 
     def visit_If(self, node: If):
         if not self.in_wasm_function:
@@ -326,26 +496,94 @@ class Compiler(ast.NodeTransformer):
             )
             raise NotImplementedError
 
+        if not self.in_wasm_function:
+            raise NotImplementedError
+
         left = super().visit(node.left)
         right = super().visit(node.comparators[0])
-
-        if not (left.get_type() == right.get_type() == binaryen.i32):
-            raise NotImplementedError
+        (cast_left, cast_right) = self._cast_numeric_to_matching(
+            left, right, node.lineno
+        )
+        op_type = cast_left.get_type()
 
         # TODO: Don't assume signed
         match node.ops[0]:
             case ast.Eq():
-                return self.module.binary(binaryen.operations.EqInt32(), left, right)
+                match op_type:
+                    case binaryen.i32:
+                        op = binaryen.operations.EqInt32()
+                    case binaryen.i64:
+                        op = binaryen.operations.EqInt64()
+                    case binaryen.f32:
+                        op = binaryen.operations.EqFloat32()
+                    case binaryen.f64:
+                        op = binaryen.operations.EqFloat64()
+                    case _:
+                        raise RuntimeError("Can't equate non numeric wasm types")
             case ast.NotEq():
-                return self.module.binary(binaryen.operations.NeInt32(), left, right)
+                match op_type:
+                    case binaryen.i32:
+                        op = binaryen.operations.NeInt32()
+                    case binaryen.i64:
+                        op = binaryen.operations.NeInt64()
+                    case binaryen.f32:
+                        op = binaryen.operations.NeFloat32()
+                    case binaryen.f64:
+                        op = binaryen.operations.NeFloat64()
+                    case _:
+                        raise RuntimeError("Can't not-equate non numeric wasm types")
             case ast.Lt():
-                return self.module.binary(binaryen.operations.LtSInt32(), left, right)
+                match op_type:
+                    case binaryen.i32:
+                        op = binaryen.operations.LtSInt32()
+                    case binaryen.i64:
+                        op = binaryen.operations.LtSInt64()
+                    case binaryen.f32:
+                        op = binaryen.operations.LtFloat32()
+                    case binaryen.f64:
+                        op = binaryen.operations.LtFloat64()
+                    case _:
+                        raise RuntimeError("Can't add non numeric wasm types")
             case ast.LtE():
-                return self.module.binary(binaryen.operations.LeSInt32(), left, right)
+                match op_type:
+                    case binaryen.i32:
+                        op = binaryen.operations.LeSInt32()
+                    case binaryen.i64:
+                        op = binaryen.operations.LeSInt64()
+                    case binaryen.f32:
+                        op = binaryen.operations.LeFloat32()
+                    case binaryen.f64:
+                        op = binaryen.operations.LeFloat64()
+                    case _:
+                        raise RuntimeError(
+                            "Can't less than or equal non numeric wasm types"
+                        )
             case ast.Gt():
-                return self.module.binary(binaryen.operations.GtSInt32(), left, right)
+                match op_type:
+                    case binaryen.i32:
+                        op = binaryen.operations.GtSInt32()
+                    case binaryen.i64:
+                        op = binaryen.operations.GtSInt64()
+                    case binaryen.f32:
+                        op = binaryen.operations.GtFloat32()
+                    case binaryen.f64:
+                        op = binaryen.operations.GtFloat64()
+                    case _:
+                        raise RuntimeError("Can't greater than non numeric wasm types")
             case ast.GtE():
-                return self.module.binary(binaryen.operations.GeSInt32(), left, right)
+                match op_type:
+                    case binaryen.i32:
+                        op = binaryen.operations.GeSInt32()
+                    case binaryen.i64:
+                        op = binaryen.operations.GeSInt64()
+                    case binaryen.f32:
+                        op = binaryen.operations.GeFloat32()
+                    case binaryen.f64:
+                        op = binaryen.operations.GeFloat64()
+                    case _:
+                        raise RuntimeError(
+                            "Can't greater than or equal non numeric wasm types"
+                        )
             case ast.Is():
                 raise NotImplementedError
             case ast.IsNot():
@@ -356,6 +594,8 @@ class Compiler(ast.NodeTransformer):
                 raise NotImplementedError
             case _:
                 raise NotImplementedError
+
+        return self.module.binary(op, cast_left, cast_right)
 
     def visit_Call(self, node: Call):
         if len(node.keywords) > 0:

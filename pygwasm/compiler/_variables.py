@@ -32,7 +32,7 @@ def visit_Constant(self: 'Compiler', node: Constant) -> Any:
         # TODO: This should be explicit! Explicitly decide on int32 signed/unsigned
         return self.module.const(binaryen.lib.BinaryenLiteralInt32(node.value))
     if isinstance(node.value, float):
-        raise NotImplementedError
+        return self.module.const(binaryen.lib.BinaryenLiteralFloat32(node.value))
     # From the docs:
     # The values represented can be simple types such as a number, string or None, but also immutable container types (tuples and frozensets) if all of their elements are constant.
     raise NotImplementedError
