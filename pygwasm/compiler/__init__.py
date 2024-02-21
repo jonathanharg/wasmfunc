@@ -1,24 +1,27 @@
 #!/usr/bin/env python
-from _ast import (
-    AST,
-    Break,
-    AnnAssign,
-    Assign,
-    Attribute,
-    BinOp,
-    Call,
-    Continue,
-    Compare,
-    AugAssign,
-    Load,
-    FunctionDef,
-    If,
-    Module,
-    Name,
-    Return,
-)
 import ast
 import symtable
+from _ast import (
+    AST,
+    AnnAssign,
+    Assert,
+    Assign,
+    Attribute,
+    AugAssign,
+    BinOp,
+    Break,
+    Call,
+    Compare,
+    Continue,
+    FunctionDef,
+    If,
+    Load,
+    Module,
+    Name,
+    Pass,
+    Return,
+)
+
 import binaryen
 
 # NOTE: Access super() with super(type(self), self)
@@ -356,7 +359,6 @@ class Compiler(ast.NodeTransformer):
         self.var_stack = []
 
     from ._imports import visit_Import, visit_ImportFrom
-
     from ._variables import visit_Constant, visit_Name
 
     def visit_Return(self, node: Return):
@@ -528,6 +530,18 @@ class Compiler(ast.NodeTransformer):
         loop_id = self.while_stack[-1]
         loop_name = f"loop_{loop_id}".encode("ascii")
         return self.module.Break(loop_name, None, None)
+
+    def visit_Pass(self, _: Pass):
+        return self.module.nop()
+
+    def visit_Assert(self, node: Assert):
+        if node.msg is not None:
+            raise RuntimeError("Assertion messages are not supported")
+        # TODO: We should write an error message to stderr
+
+        condition = super().visit(node.test)
+        check = self.module.If(condition, self.module.nop(), self.module.unreachable())
+        return check
 
     def visit_Compare(self, node: Compare):
         if len(node.comparators) > 1 or len(node.ops) > 1:
