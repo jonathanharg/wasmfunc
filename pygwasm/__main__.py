@@ -1,4 +1,5 @@
 import sys
+
 from .file_handler import compile_file, generate_output_name
 
 for string_path in sys.argv[1:]:

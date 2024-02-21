@@ -1,11 +1,11 @@
 from ast import Import, ImportFrom
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from . import Compiler
 
-def visit_Import(self: 'Compiler', node: Import) -> Any:
+
+def visit_Import(self: "Compiler", node: Import) -> Any:
     # Record if pygwasm is imported, or if its imported under an alias
     for module in node.names:
         print(f"Found import for {module.name}")
@@ -18,7 +18,8 @@ def visit_Import(self: 'Compiler', node: Import) -> Any:
                 self.module_aliases.append("pygwasm")
     return
 
-def visit_ImportFrom(self: 'Compiler', node: ImportFrom) -> Any:
+
+def visit_ImportFrom(self: "Compiler", node: ImportFrom) -> Any:
     # Record if the pygwasm decorator is imported, or if its imported under an alias
     if node.module != "pygwasm":
         print("Found non binaryen import from")

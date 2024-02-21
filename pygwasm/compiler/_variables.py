@@ -1,18 +1,18 @@
-from ast import Load, Name, Store, Del, Constant
-from typing import Any
+from ast import Constant, Del, Load, Name, Store
+from typing import TYPE_CHECKING, Any
 
-from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from . import Compiler
 
 import binaryen
 
-def visit_Name(self: 'Compiler', node: Name) -> binaryen.Expression | None:
+
+def visit_Name(self: "Compiler", node: Name) -> binaryen.Expression | None:
     var = self._get_local_by_name(node.id)
 
     if var is None:
         raise RuntimeError
-    
+
     (index, var_type) = var
 
     if isinstance(node.ctx, Load):
@@ -22,7 +22,8 @@ def visit_Name(self: 'Compiler', node: Name) -> binaryen.Expression | None:
     if isinstance(node.ctx, Del):
         raise NotImplementedError
 
-def visit_Constant(self: 'Compiler', node: Constant) -> Any:
+
+def visit_Constant(self: "Compiler", node: Constant) -> Any:
     if node.value is None:
         raise NotImplementedError
     if isinstance(node.value, str):

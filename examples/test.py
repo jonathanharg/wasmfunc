@@ -1,5 +1,4 @@
-from pygwasm import i32, func
-
+from pygwasm import func, i32
 
 # @pygwasm.func
 # def fib(n):

@@ -1,5 +1,6 @@
 from pygwasm import func, i32
 
+
 @func
 def addition() -> i32:
     return 2 + 3
@@ -9,17 +10,21 @@ def addition() -> i32:
 def subtraction() -> i32:
     return 5 - 3
 
+
 @func
 def multiplication() -> i32:
     return 5 * 3
+
 
 @func
 def division() -> i32:
     return 6 // 2  # Integer division
 
+
 @func
 def remainder() -> i32:
     return 7 % 3  # Modulus
+
 
 # @func
 # def exponentiation() -> i32:

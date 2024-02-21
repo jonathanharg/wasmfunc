@@ -11,8 +11,8 @@
 #         glob.capitalize()
 #         asdf.append(2)
 #         yew = "A"
-    
-#     # yew 
+
+#     # yew
 
 
 #     # x += 1
@@ -22,5 +22,3 @@
 #     # a, (b, c), d = 1, (2, 3), 4
 #     # y = func(x) + 10
 #     return x
-
-

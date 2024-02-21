@@ -1,4 +1,5 @@
-from pygwasm import func, f32
+from pygwasm import f32, func
+
 
 @func
 def addition() -> f32:
@@ -6,11 +7,13 @@ def addition() -> f32:
     y: f32 = 3.0
     return x + y
 
+
 # @func
 # def addition_rounding() -> f64:
 #     x: f64 = 0.1
 #     y: f64 = 0.2
 #     return x + y
+
 
 @func
 def subtraction() -> f32:
@@ -18,11 +21,13 @@ def subtraction() -> f32:
     y: f32 = 3.0
     return x - y
 
+
 @func
 def multiplication() -> f32:
     x: f32 = 5.0
     y: f32 = 3.0
     return x * y
+
 
 # @func
 # def division() -> f32:

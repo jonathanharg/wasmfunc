@@ -1,11 +1,13 @@
-import os
 import importlib
 import importlib.util
+import os
 import sys
 from glob import glob
-from wasmtime import Store, Module, Instance
+
+from wasmtime import Instance, Module, Store
 
 from pygwasm.file_handler import compile_file
+
 
 def test_pygwasm_file(path: str):
     # print(path)
@@ -52,6 +54,7 @@ def test_pygwasm_file(path: str):
 
             assert python_output == wasm_output
 
+
 parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 examples_dir = os.path.join(parent_dir, "examples")
 
@@ -59,8 +62,9 @@ examples_dir = os.path.join(parent_dir, "examples")
 def pytest_generate_tests(metafunc):
     file_path = os.path.join(examples_dir, "*.py")
     examples = glob(file_path)
-    if 'path' in metafunc.fixturenames:
-        metafunc.parametrize('path', examples)
+    if "path" in metafunc.fixturenames:
+        metafunc.parametrize("path", examples)
+
 
 # test_examples()
 # run_test_on_example("fib.py", "fib", [(4,), (0,), (1,), (10,), (-1,)])
