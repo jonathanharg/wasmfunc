@@ -1,4 +1,4 @@
-# import pygwasm
+from pygwasm import i32, func
 
 
 # @pygwasm.func
@@ -19,13 +19,13 @@
 #     print(message)
 
 
-# @pygwasm.func
-# def basic():
-#     a: int
-#     b: int
-#     a = 1
-#     b = 2
-#     return a + b
+@func
+def basic() -> i32:
+    a: i32
+    b: i32
+    a = 1
+    b = 2
+    return a + b
 
 
 # if __name__ == "__main__":

@@ -1,27 +1,28 @@
-import pygwasm
+from pygwasm import func, i32
 
-@pygwasm.func
-def addition() -> pygwasm.i32:
+@func
+def addition() -> i32:
     return 2 + 3
 
-@pygwasm.func
-def subtraction() -> pygwasm.i32:
+
+@func
+def subtraction() -> i32:
     return 5 - 3
 
-@pygwasm.func
-def multiplication() -> pygwasm.i32:
+@func
+def multiplication() -> i32:
     return 5 * 3
 
-@pygwasm.func
-def division() -> pygwasm.i32:
+@func
+def division() -> i32:
     return 6 // 2  # Integer division
 
-@pygwasm.func
-def remainder() -> pygwasm.i32:
+@func
+def remainder() -> i32:
     return 7 % 3  # Modulus
 
-# @pygwasm.func
-# def exponentiation() -> pygwasm.i32:
+# @func
+# def exponentiation() -> i32:
 #     return 2 ** 3
 
 testinputs_addition = [()]

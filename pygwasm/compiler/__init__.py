@@ -7,17 +7,15 @@ from _ast import (
     BinOp,
     Call,
     Compare,
-    Constant,
+    AugAssign,
+    Load,
     FunctionDef,
     If,
-    Import,
-    ImportFrom,
     Module,
     Name,
     Return,
 )
 import ast
-from typing import Any, TypeAlias
 import symtable
 import binaryen
 
@@ -35,6 +33,7 @@ class Compiler(ast.NodeTransformer):
         self.object_aliases = {}
         self.in_wasm_function = False
         self.var_stack: list[tuple[str, BinaryenType]] = []
+        self.while_stack = [0]
         super().__init__()
 
     def _create_local(self, name: str, var_type: BinaryenType) -> int:
@@ -227,7 +226,10 @@ class Compiler(ast.NodeTransformer):
             assert value.get_type() == target_type
             expressions.append(self.module.local_set(target_index, value))
 
-        return self.module.block(None, expressions, binaryen.none)
+        if len(expressions) > 1:
+            return self.module.block(None, expressions, binaryen.none)
+
+        return expressions[0]
 
     def visit_AnnAssign(self, node: AnnAssign):
         if not self.in_wasm_function:
@@ -270,6 +272,18 @@ class Compiler(ast.NodeTransformer):
             return self.module.local_set(local_id, cast_value)
 
         return self.module.nop()
+
+    def visit_AugAssign(self, node: AugAssign):
+        if not isinstance(node.target, Name):
+            raise NotImplementedError(
+                "Probably aug-assigning with subscript or dot notation. Not currently supported."
+            )
+        load_target = Name(id=node.target.id, ctx=Load())
+        operation = BinOp(
+            left=load_target, op=node.op, right=node.value, lineno=node.lineno
+        )
+        hijacked_node = Assign(targets=[node.target], value=operation)
+        return self.visit_Assign(hijacked_node)
 
     def visit_FunctionDef(self, node: FunctionDef):
         """Check if function has the binaryen decorator @binaryen.func"""
@@ -462,31 +476,30 @@ class Compiler(ast.NodeTransformer):
         if len(node.orelse) != 0:
             raise NotImplementedError
 
+        self.while_stack.append(id(node))
+
         loop_body_expressions = []
         for python_exp in node.body:
             wasm_exp = super().visit(python_exp)
             loop_body_expressions.append(wasm_exp)
 
+        cur_id = self.while_stack.pop()
+
         test = super().visit(node.test)
-        # TODO: Optimize this to a EQZ
-        true = self.module.const(binaryen.lib.BinaryenLiteralInt32(1))
-        break_if_test_fail = self.module.binary(
-            binaryen.operations.NeInt32(), test, true
-        )
-        check_condition = self.module.Break(b"while", break_if_test_fail, None)
-        jump_to_start = self.module.Break(b"loop", None, None)
 
-        inner_loop = self.module.block(
-            None,
-            [check_condition, *loop_body_expressions, jump_to_start],
-            binaryen.auto,
+        restart_loop = self.module.Break(f"loop_{cur_id}".encode("ascii"), None, None)
+
+        body = self.module.block(
+            f"loop_body_{cur_id}".encode("ascii"),
+            [*loop_body_expressions, restart_loop],
+            binaryen.none,
         )
 
-        loop = self.module.loop(b"loop", inner_loop)
+        loop_test = self.module.If(test, body, self.module.nop())
 
-        while_loop = self.module.block(b"while", [loop], binaryen.auto)
+        loop = self.module.loop(f"loop_{cur_id}".encode("ascii"), loop_test)
 
-        return while_loop
+        return loop
 
     def visit_Compare(self, node: Compare):
         if len(node.comparators) > 1 or len(node.ops) > 1:

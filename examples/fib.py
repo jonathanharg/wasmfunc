@@ -24,8 +24,7 @@ def fib_loop(n: i32) -> i32:
         next_fib = previous + current
         previous = current
         current = next_fib
-        # i += 1
-        i = i + 1
+        i += 1
     
     return current
 
