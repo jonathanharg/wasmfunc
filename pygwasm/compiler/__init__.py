@@ -1,11 +1,13 @@
 #!/usr/bin/env python
 from _ast import (
     AST,
+    Break,
     AnnAssign,
     Assign,
     Attribute,
     BinOp,
     Call,
+    Continue,
     Compare,
     AugAssign,
     Load,
@@ -473,33 +475,59 @@ class Compiler(ast.NodeTransformer):
         if not self.in_wasm_function:
             raise NotImplementedError
 
-        if len(node.orelse) != 0:
-            raise NotImplementedError
+        loop_condition = super().visit(node.test)
 
         self.while_stack.append(id(node))
 
-        loop_body_expressions = []
+        loop_body = []
         for python_exp in node.body:
             wasm_exp = super().visit(python_exp)
-            loop_body_expressions.append(wasm_exp)
+            loop_body.append(wasm_exp)
 
         cur_id = self.while_stack.pop()
 
-        test = super().visit(node.test)
+        else_body = []
+        for python_exp in node.orelse:
+            wasm_exp = super().visit(python_exp)
+            else_body.append(wasm_exp)
+
+        else_block = (
+            self.module.block(
+                f"loop_else_{cur_id}".encode("ascii"),
+                else_body,
+                binaryen.none,
+            )
+            if len(else_body) > 0
+            else self.module.nop()
+        )
 
         restart_loop = self.module.Break(f"loop_{cur_id}".encode("ascii"), None, None)
 
         body = self.module.block(
             f"loop_body_{cur_id}".encode("ascii"),
-            [*loop_body_expressions, restart_loop],
+            [*loop_body, restart_loop],
             binaryen.none,
         )
 
-        loop_test = self.module.If(test, body, self.module.nop())
+        loop_test = self.module.If(loop_condition, body, else_block)
 
         loop = self.module.loop(f"loop_{cur_id}".encode("ascii"), loop_test)
 
         return loop
+
+    def visit_Break(self, _: Break):
+        if len(self.while_stack) == 0:
+            raise RuntimeError("Break can only be used in a while loop")
+        loop_id = self.while_stack[-1]
+        loop_name = f"loop_body_{loop_id}".encode("ascii")
+        return self.module.Break(loop_name, None, None)
+
+    def visit_Continue(self, _: Continue):
+        if len(self.while_stack) == 0:
+            raise RuntimeError("Break can only be used in a while loop")
+        loop_id = self.while_stack[-1]
+        loop_name = f"loop_{loop_id}".encode("ascii")
+        return self.module.Break(loop_name, None, None)
 
     def visit_Compare(self, node: Compare):
         if len(node.comparators) > 1 or len(node.ops) > 1:
