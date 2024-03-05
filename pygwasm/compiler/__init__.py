@@ -1,36 +1,58 @@
 #!/usr/bin/env python
-import ast
 import symtable
-from _ast import (
+from ast import (
     AST,
+    Add,
     AnnAssign,
     Assert,
     Assign,
     Attribute,
     AugAssign,
     BinOp,
+    BitAnd,
+    BitOr,
+    BitXor,
     Break,
     Call,
     Compare,
     Constant,
     Continue,
     Del,
+    Div,
+    Eq,
+    FloorDiv,
     FunctionDef,
+    Gt,
+    GtE,
     If,
     Import,
     ImportFrom,
+    In,
+    Is,
+    IsNot,
     List,
     Load,
+    LShift,
+    Lt,
+    LtE,
+    MatMult,
+    Mod,
     Module,
+    Mult,
     Name,
+    NodeTransformer,
+    NotEq,
+    NotIn,
     Pass,
+    Pow,
     Return,
+    RShift,
     Store,
+    Sub,
+    While,
 )
 
 import binaryen
-
-# NOTE: Access super() with super(type(self), self)
 
 type BinaryenType = binaryen.internals.BinaryenType
 Int32 = binaryen.type.Int32
@@ -39,7 +61,7 @@ Float32 = binaryen.type.Float32
 Float64 = binaryen.type.Float64
 
 
-class Compiler(ast.NodeTransformer):
+class Compiler(NodeTransformer):
     def __init__(
         self,
         symbol_table: symtable.SymbolTable,
@@ -68,7 +90,7 @@ class Compiler(ast.NodeTransformer):
     def compile(self, node: AST) -> None:
         return self.visit(node)
 
-    def _get_binaryen_type(self, node: Attribute | Name) -> BinaryenType:  # type: ignore
+    def _get_binaryen_type(self, node: Attribute | Name):
         """Convert a pygwasm annotation e.g. x:pygwasm.i32 to a binaryen type object e.g: binaryen.type.Int32()"""
         # Annotations are either Attribute(Name) e.g. pygwasm.i32
         # Or are Name e.g. by using `from pygwasm import i32`
@@ -78,11 +100,11 @@ class Compiler(ast.NodeTransformer):
         type_map = {"i32": Int32, "i64": Int64, "f32": Float32, "f64": Float64}
 
         match node:
-            case ast.Name():
+            case Name():
                 type_name = self.object_aliases[node.id]
                 assert type_name is not None
                 return type_map[type_name]
-            case ast.Attribute(value=ast.Name()):
+            case Attribute(value=Name()):
                 assert node.value.id in self.module_aliases
                 type_name = node.attr
                 return type_map[type_name]
@@ -309,12 +331,12 @@ class Compiler(ast.NodeTransformer):
         contains_wasm = False
         for decorator in node.decorator_list:
             match decorator:
-                case ast.Attribute(
-                    value=ast.Name(), attr="func"
+                case Attribute(
+                    value=Name(), attr="func"
                 ) if decorator.value.id in self.module_aliases:
                     contains_wasm = True
                     break
-                case ast.Name() if self.object_aliases[decorator.id] == "func":
+                case Name() if self.object_aliases[decorator.id] == "func":
                     contains_wasm = True
                     break
 
@@ -347,7 +369,7 @@ class Compiler(ast.NodeTransformer):
         body = self.module.block(None, [], return_type)
 
         for body_node in node.body:
-            if isinstance(body_node, ast.AST):
+            if isinstance(body_node, AST):
                 expression = super().visit(body_node)
                 if isinstance(expression, binaryen.Expression):
                     body.append_child(expression)
@@ -462,7 +484,7 @@ class Compiler(ast.NodeTransformer):
         op_type = cast_left.get_type()
 
         match node.op:
-            case ast.Add():
+            case Add():
                 match op_type:
                     case binaryen.type.Int32:
                         op = binaryen.operations.AddInt32()
@@ -474,7 +496,7 @@ class Compiler(ast.NodeTransformer):
                         op = binaryen.operations.AddFloat64()
                     case _:
                         raise RuntimeError("Can't add non numeric wasm types")
-            case ast.Sub():
+            case Sub():
                 match op_type:
                     case binaryen.type.Int32:
                         op = binaryen.operations.SubInt32()
@@ -486,7 +508,7 @@ class Compiler(ast.NodeTransformer):
                         op = binaryen.operations.SubFloat64()
                     case _:
                         raise RuntimeError("Can't subtract non numeric wasm types")
-            case ast.Mult():
+            case Mult():
                 match op_type:
                     case binaryen.type.Int32:
                         op = binaryen.operations.MulInt32()
@@ -498,7 +520,7 @@ class Compiler(ast.NodeTransformer):
                         op = binaryen.operations.MulFloat64()
                     case _:
                         raise RuntimeError("Can't multiply non numeric wasm types")
-            case ast.Mod():
+            case Mod():
                 match op_type:
                     # TODO: Assuming signed
                     case binaryen.type.Int32:
@@ -507,7 +529,7 @@ class Compiler(ast.NodeTransformer):
                         op = binaryen.operations.RemSInt64()
                     case _:
                         raise RuntimeError("Can't do modulus on non integer wasm types")
-            case ast.FloorDiv():
+            case FloorDiv():
                 match op_type:
                     # TODO: Assuming signed
                     case binaryen.type.Int32:
@@ -521,14 +543,14 @@ class Compiler(ast.NodeTransformer):
                     case _:
                         raise RuntimeError("Can't multiply non numeric wasm types")
             case (
-                ast.MatMult()
-                | ast.Div()
-                | ast.Pow()
-                | ast.LShift()
-                | ast.RShift()
-                | ast.BitOr()
-                | ast.BitXor()
-                | ast.BitAnd()
+                MatMult()
+                | Div()
+                | Pow()
+                | LShift()
+                | RShift()
+                | BitOr()
+                | BitXor()
+                | BitAnd()
             ):
                 raise NotImplementedError
             case _:
@@ -555,7 +577,7 @@ class Compiler(ast.NodeTransformer):
 
         return self.module.If(condition, if_true, if_false)
 
-    def visit_While(self, node: ast.While):
+    def visit_While(self, node: While):
         if not self.in_wasm_function:
             raise NotImplementedError
 
@@ -645,7 +667,7 @@ class Compiler(ast.NodeTransformer):
 
         # TODO: Don't assume signed
         match node.ops[0]:
-            case ast.Eq():
+            case Eq():
                 match op_type:
                     case binaryen.type.Int32:
                         op = binaryen.operations.EqInt32()
@@ -657,7 +679,7 @@ class Compiler(ast.NodeTransformer):
                         op = binaryen.operations.EqFloat64()
                     case _:
                         raise RuntimeError("Can't equate non numeric wasm types")
-            case ast.NotEq():
+            case NotEq():
                 match op_type:
                     case binaryen.type.Int32:
                         op = binaryen.operations.NeInt32()
@@ -669,7 +691,7 @@ class Compiler(ast.NodeTransformer):
                         op = binaryen.operations.NeFloat64()
                     case _:
                         raise RuntimeError("Can't not-equate non numeric wasm types")
-            case ast.Lt():
+            case Lt():
                 match op_type:
                     case binaryen.type.Int32:
                         op = binaryen.operations.LtSInt32()
@@ -681,7 +703,7 @@ class Compiler(ast.NodeTransformer):
                         op = binaryen.operations.LtFloat64()
                     case _:
                         raise RuntimeError("Can't add non numeric wasm types")
-            case ast.LtE():
+            case LtE():
                 match op_type:
                     case binaryen.type.Int32:
                         op = binaryen.operations.LeSInt32()
@@ -695,7 +717,7 @@ class Compiler(ast.NodeTransformer):
                         raise RuntimeError(
                             "Can't less than or equal non numeric wasm types"
                         )
-            case ast.Gt():
+            case Gt():
                 match op_type:
                     case binaryen.type.Int32:
                         op = binaryen.operations.GtSInt32()
@@ -707,7 +729,7 @@ class Compiler(ast.NodeTransformer):
                         op = binaryen.operations.GtFloat64()
                     case _:
                         raise RuntimeError("Can't greater than non numeric wasm types")
-            case ast.GtE():
+            case GtE():
                 match op_type:
                     case binaryen.type.Int32:
                         op = binaryen.operations.GeSInt32()
@@ -721,13 +743,13 @@ class Compiler(ast.NodeTransformer):
                         raise RuntimeError(
                             "Can't greater than or equal non numeric wasm types"
                         )
-            case ast.Is():
+            case Is():
                 raise NotImplementedError
-            case ast.IsNot():
+            case IsNot():
                 raise NotImplementedError
-            case ast.In():
+            case In():
                 raise NotImplementedError
-            case ast.NotIn():
+            case NotIn():
                 raise NotImplementedError
             case _:
                 raise NotImplementedError
