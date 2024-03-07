@@ -13,7 +13,7 @@ def compile_file(input_path: str):
         tree = ast.parse(code, filename=filename, type_comments=True)
         symbol_table = symtable.symtable(code, filename, "exec")
         compiler = Compiler(symbol_table)
-        compiler.compile(tree)
+        compiler.visit(tree)
         return compiler
 
 

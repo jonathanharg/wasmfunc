@@ -49,7 +49,9 @@ from ast import (
     RShift,
     Store,
     Sub,
+    Subscript,
     While,
+    expr,
 )
 
 import binaryen
@@ -74,6 +76,9 @@ class Compiler(NodeTransformer):
         self.in_wasm_function = False
         self.var_stack: list[tuple[str, BinaryenType]] = []
         self.while_stack = [0]
+        # TODO: Make this a user option
+        self.module.set_feature(binaryen.Feature.GC | binaryen.Feature.ReferenceTypes)
+
         super().__init__()
 
     def _create_local(self, name: str, var_type: BinaryenType) -> int:
@@ -87,27 +92,27 @@ class Compiler(NodeTransformer):
             None,
         )
 
-    def compile(self, node: AST) -> None:
-        return self.visit(node)
-
-    def _get_binaryen_type(self, node: Attribute | Name):
+    def _get_binaryen_type(self, node: expr | None):
         """Convert a pygwasm annotation e.g. x:pygwasm.i32 to a binaryen type object e.g: binaryen.type.Int32()"""
         # Annotations are either Attribute(Name) e.g. pygwasm.i32
         # Or are Name e.g. by using `from pygwasm import i32`
         # Note that both the Attribute and Name can be aliased because of `import pygwasm as p`
         # Or `from pygwasm import i32 as integer32`
 
+        if node is None:
+            return None
+        if not (isinstance(node, Name) or isinstance(node, Attribute)):
+            raise RuntimeWarning(f"Unkown argument annotation {node} ({type(node)})")
+
         type_map = {"i32": Int32, "i64": Int64, "f32": Float32, "f64": Float64}
 
         match node:
             case Name():
                 type_name = self.object_aliases[node.id]
-                assert type_name is not None
+                assert isinstance(type_name, str)
                 return type_map[type_name]
-            case Attribute(value=Name()):
-                assert node.value.id in self.module_aliases
-                type_name = node.attr
-                return type_map[type_name]
+            case Attribute():
+                return type_map[node.attr]
 
     def _cast_numeric_to_matching(
         self, left: binaryen.Expression, right: binaryen.Expression, lineno: int
@@ -240,35 +245,33 @@ class Compiler(NodeTransformer):
 
         expressions = []
         value = self.visit(node.value)
+        if not isinstance(value, binaryen.Expression):
+            raise RuntimeError("Expected Binaryen value")
 
         for target in node.targets:
-            if not isinstance(target, Name):
-                raise NotImplementedError
+            if isinstance(target, Name):
+                # TODO: We assume the variable is local
+                target_var = self._get_local_by_name(target.id)
 
-            # TODO: We assume the variable is local
-            target_var = self._get_local_by_name(target.id)
+                if target_var is None:
+                    # We are not reassigning to a variable, but creating a new one
+                    # Only do this if we can work out the type of the value
+                    computed_type = value.get_type()
+                    new_id = self._create_local(target.id, computed_type)
+                    target_var = (new_id, computed_type)
 
-            if target_var is None:
-                # We are not reassigning to a variable, but creating a new one
-                # Only do this if we can work out the type of the value
+                (target_index, target_type) = target_var
 
-                if not isinstance(value, binaryen.Expression):
-                    # TODO: Better error messages
-                    raise RuntimeError(
-                        "Initialising a variable without a type. Use x: i32 = 1 instead of x = 1."
-                    )
-
-                computed_type = value.get_type()
-                new_id = self._create_local(target.id, computed_type)
-                target_var = (new_id, computed_type)
-
-            (target_index, target_type) = target_var
-
-            assert value.get_type() == target_type
-            expressions.append(self.module.local_set(target_index, value))
+                assert value.get_type() == target_type
+                expressions.append(self.module.local_set(target_index, value))
+            else:
+                print(f"WARNING: Visiting target {target} ({type(target)}) on line {target.lineno}")
 
         if len(expressions) > 1:
             return self.module.block(None, expressions, binaryen.type.TypeNone)
+        
+        if len(expressions) == 0:
+            return self.module.nop()
 
         return expressions[0]
 
@@ -422,7 +425,7 @@ class Compiler(NodeTransformer):
                 self.object_aliases[function.name] = function.name
         return
 
-    def visit_Name(self: "Compiler", node: Name):
+    def visit_Name(self, node: Name):
         var = self._get_local_by_name(node.id)
 
         if var is None:
@@ -437,7 +440,7 @@ class Compiler(NodeTransformer):
         if isinstance(node.ctx, Del):
             raise NotImplementedError
 
-    def visit_Constant(self: "Compiler", node: Constant):
+    def visit_Constant(self, node: Constant):
         if node.value is None:
             raise NotImplementedError
         if isinstance(node.value, str):
@@ -459,17 +462,43 @@ class Compiler(NodeTransformer):
         raise NotImplementedError
 
     def visit_List(self, node: List):
+        # TODO: Don't assume its i32
+        tb = binaryen.TypeBuilder(1)
+        tb.set_array_type(0, Int32, binaryen.type.NotPacked, True)
+        Int32ArrayHeap = tb.build()[0]
+
         elements = []
         for el in node.elts:
             wasm_el = super().visit(el)
             elements.append(wasm_el)
-        return self.module.array_new_fixed(Int32, elements)
+        return self.module.array_new_fixed(Int32ArrayHeap, elements)
+
+    def visit_Subscript(self, node: Subscript):
+        value = self.visit(node.value)
+        if not isinstance(value, binaryen.Expression):
+            raise RuntimeError("Expected Binaryen Expression for value")
+        
+        value_type = value.get_type()
+        value_heap_type = binaryen.type.get_heap_type(value_type)
+
+        if value_heap_type == binaryen.type.HeapNone:
+            raise RuntimeError("Expected a heap type")
+
+        if not binaryen.type.heap_type.is_array(value_heap_type):
+            raise RuntimeError("Expected an array")
+        
+        index = self.visit(node.slice)
+        if not isinstance(value, binaryen.Expression):
+            raise RuntimeError("Expected Binaryen Expression for index")
+        
+        return self.module.array_get(value, index, binaryen.type.Auto, False)
+
 
     def visit_Return(self, node: Return):
         if not self.in_wasm_function:
             raise NotImplementedError
 
-        value = super().visit(node.value)
+        value = super().visit(node.value) if node.value is not None else None
         return self.module.Return(value)
 
     def visit_BinOp(self, node: BinOp):
@@ -760,10 +789,11 @@ class Compiler(NodeTransformer):
         if len(node.keywords) > 0:
             print("Pygwasm does not support keyword arguments!")
             raise NotImplementedError
+        assert isinstance(node.func, Name)
         name = bytes(node.func.id, "ascii")
         args = []
-        for arg in node.args:
-            arg_exp = super().visit(arg)
+        for argument in node.args:
+            arg_exp = super().visit(argument)
             args.append(arg_exp)
         # TODO: Actually find out the return type dont just hard code it lol
         return self.module.call(name, args, Int32)
