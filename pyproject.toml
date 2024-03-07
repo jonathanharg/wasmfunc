@@ -1,16 +1,36 @@
-[build-system]
-requires = ["setuptools"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "pygwasm"
+version = "0.0.1"
+description = "A WebAssembly compiler for Python"
 authors = [
     {name = "Jonathan Hargreaves", email = "jhargreaves189@gmail.com"},
 ]
-description = "A WebAssembly compiler for Python"
-requires-python = ">=3.11"
+readme = "README.md"
+keywords = ["WebAssembly", "Compiler"]
+classifiers = [
+    "Environment :: MacOS X",
+    "Environment :: WebAssembly",
+    "Environment :: Win32 (MS Windows)",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Natural Language :: English",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python",
+    "Topic :: Software Development :: Compilers",
+]
+license = { file = "LICENSE" }
+requires-python = ">=3.12"
 dependencies = [
-    # 'binaryenpy >= 0.0.2',
+    'binaryen.py >= 117.0.0a3',
     # TODO: Dev dependencies: wasmtime, pytest
 ]
-version = "0.0.1"
+
+[project.urls]
+"Source Code" = "https://github.com/jonathanharg/pygwasm"
+Issues = "https://github.com/jonathanharg/pygwasm/issues"
+# Changelog = "https://github.com/jonathanharg/pygwasm/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+dev = ["black", "isort", "wasmtime","pytest"]

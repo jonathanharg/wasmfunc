@@ -1,0 +1,34 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Test Pygwasm",
+            "type": "python",
+            "request": "launch",
+            "module": "pygwasm",
+            "justMyCode": true,
+            "args": ["${file}"]
+        },
+        {
+            "name": "Python: Current File",
+            "type": "python",
+            "request": "launch",
+            "program": "${file}",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": ["examples/add.py"]
+        },
+        {
+            "name": "Compile File with Pygwasm",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "pygwasm",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "args": ["${file}"]
+        }
+    ]
+}
