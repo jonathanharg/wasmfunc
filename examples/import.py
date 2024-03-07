@@ -1,5 +1,9 @@
 import pygwasm as p
-from pygwasm import func, i32 as l
+
+# fmt: off
+from pygwasm import func, i32 as l # isort: skip
+# fmt: on
+
 
 @p.func
 def add(x: p.i32, y: l) -> p.i32:
