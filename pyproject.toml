@@ -33,4 +33,4 @@ Issues = "https://github.com/jonathanharg/pygwasm/issues"
 # Changelog = "https://github.com/jonathanharg/pygwasm/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
-dev = ["black", "isort", "wasmtime","pytest"]
+dev = ["black", "isort", "wasmtime","pytest", "build"]
