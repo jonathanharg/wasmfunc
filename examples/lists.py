@@ -1,4 +1,3 @@
-import pygwasm
 from pygwasm import i32, func
 
 @func

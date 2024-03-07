@@ -248,28 +248,46 @@ class Compiler(NodeTransformer):
         if not isinstance(value, binaryen.Expression):
             raise RuntimeError("Expected Binaryen value")
 
+        # LocalSet, GlobalSet, Store?, StructSet, ArraySet
+        # (int, type), (str, type), ? , ?, (Array:Exp, Index:Exp)
         for target in node.targets:
-            if isinstance(target, Name):
-                # TODO: We assume the variable is local
-                target_var = self._get_local_by_name(target.id)
+            target_value = self.visit(target)
 
-                if target_var is None:
+            match target_value:
+                case None:
                     # We are not reassigning to a variable, but creating a new one
                     # Only do this if we can work out the type of the value
                     computed_type = value.get_type()
                     new_id = self._create_local(target.id, computed_type)
-                    target_var = (new_id, computed_type)
+                    expressions.append(self.module.local_set(new_id, value))
 
-                (target_index, target_type) = target_var
+                case (int(), int()):
+                    index = target_value[0]
+                    target_type = target_value[1]
+                    if not value.get_type() == target_type:
+                        raise RuntimeError("Cannot change the type of a variable")
+                    expressions.append(self.module.local_set(index, value))
 
-                assert value.get_type() == target_type
-                expressions.append(self.module.local_set(target_index, value))
-            else:
-                print(f"WARNING: Visiting target {target} ({type(target)}) on line {target.lineno}")
+                case (binaryen.Expression(), binaryen.Expression()):
+                    # NOTE: Assuming array here
+                    # TODO: support structs
+                    array = target_value[0]
+                    index = target_value[1]
+                    array_heap_type = binaryen.type.get_heap_type(array.get_type())
+
+                    if not binaryen.type.heap_type.is_array(array_heap_type):
+                        raise RuntimeError("Expected array")
+
+                    expressions.append(self.module.array_set(array, index, value))
+
+                case _:
+                    raise RuntimeError(
+                        f"Assigning target {target} ({target_value} type:{type(target)}) to {node.value} ({value} type:{type(node.value)}) on line {target.lineno}"
+                    )
 
         if len(expressions) > 1:
             return self.module.block(None, expressions, binaryen.type.TypeNone)
-        
+
         if len(expressions) == 0:
             return self.module.nop()
 
@@ -426,17 +444,20 @@ class Compiler(NodeTransformer):
         return
 
     def visit_Name(self, node: Name):
+        # PYTHON RULE: Local -> Enclosing -> Global -> Built-in
+        # Name could be
+        # LocalSet, GlobalSet, Store?, StructSet, ArraySet
+
         var = self._get_local_by_name(node.id)
 
-        if var is None:
-            raise RuntimeError
-
-        (index, var_type) = var
-
+        # TODO: Assuming local variable
         if isinstance(node.ctx, Load):
+            if var is None:
+                raise RuntimeError("Trying to load an undeclared variable")
+            (index, var_type) = var
             return self.module.local_get(index, var_type)
         if isinstance(node.ctx, Store):
-            raise NotImplementedError
+            return var
         if isinstance(node.ctx, Del):
             raise NotImplementedError
 
@@ -444,10 +465,7 @@ class Compiler(NodeTransformer):
         if node.value is None:
             raise NotImplementedError
         if isinstance(node.value, str):
-            self.module.set_feature(
-                binaryen.Feature.ReferenceTypes | binaryen.Feature.Strings
-            )
-            print(list(self.module.get_features()))
+            # TODO: Don't ascii encode
             return self.module.string_const(node.value.encode("ascii"))
         if isinstance(node.value, int):
             # TODO: Should probably bounds check this!!!
@@ -476,23 +494,28 @@ class Compiler(NodeTransformer):
     def visit_Subscript(self, node: Subscript):
         value = self.visit(node.value)
         if not isinstance(value, binaryen.Expression):
-            raise RuntimeError("Expected Binaryen Expression for value")
-        
+            raise RuntimeError("Expected Binaryen Expression for subscript value")
+
+        index = self.visit(node.slice)
+        if not isinstance(index, binaryen.Expression):
+            raise RuntimeError("Expected Binaryen Expression for index value")
+
         value_type = value.get_type()
         value_heap_type = binaryen.type.get_heap_type(value_type)
 
-        if value_heap_type == binaryen.type.HeapNone:
-            raise RuntimeError("Expected a heap type")
-
-        if not binaryen.type.heap_type.is_array(value_heap_type):
-            raise RuntimeError("Expected an array")
-        
-        index = self.visit(node.slice)
-        if not isinstance(value, binaryen.Expression):
-            raise RuntimeError("Expected Binaryen Expression for index")
-        
-        return self.module.array_get(value, index, binaryen.type.Auto, False)
-
+        match node.ctx:
+            case Load():
+                if binaryen.type.heap_type.is_array(value_heap_type):
+                    return self.module.array_get(
+                        value, index, binaryen.type.Auto, False
+                    )
+                raise NotImplementedError(
+                    f"Cannot load subscript on {value_type} ({value_heap_type})"
+                )
+            case Store():
+                return (value, index)
+            case Del():
+                raise NotImplementedError("Cannot delete with subscript")
 
     def visit_Return(self, node: Return):
         if not self.in_wasm_function:
