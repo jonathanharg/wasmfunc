@@ -23,14 +23,12 @@ classifiers = [
 license = { file = "LICENSE" }
 requires-python = ">=3.12"
 dependencies = [
-    'binaryen.py >= 117.0.0a3',
-    # TODO: Dev dependencies: wasmtime, pytest
+    'binaryen.py >= 117.0.0',
 ]
 
 [project.urls]
 "Source Code" = "https://github.com/jonathanharg/pygwasm"
 Issues = "https://github.com/jonathanharg/pygwasm/issues"
-# Changelog = "https://github.com/jonathanharg/pygwasm/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = ["black", "isort", "wasmtime","pytest", "build"]

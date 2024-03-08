@@ -1,8 +1,5 @@
 {
     "python.analysis.typeCheckingMode": "basic",
-    "python.analysis.extraPaths": [
-        "../binaryen.py"
-    ],
     "[python]": {
         "editor.defaultFormatter": "ms-python.black-formatter"
     },
