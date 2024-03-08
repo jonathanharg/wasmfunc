@@ -238,114 +238,8 @@ class Compiler(NodeTransformer):
         print("Creating WASM Module")
         super().generic_visit(node)
 
-    def visit_Assign(self, node: Assign):
-        if not self.in_wasm_function:
-            # TODO: No globals atm
-            return
-
-        expressions = []
-        value = self.visit(node.value)
-        if not isinstance(value, binaryen.Expression):
-            raise RuntimeError("Expected Binaryen value")
-
-        # LocalSet, GlobalSet, Store?, StructSet, ArraySet
-        # (int, type), (str, type), ? , ?, (Array:Exp, Index:Exp)
-        for target in node.targets:
-            target_value = self.visit(target)
-
-            match target_value:
-                case None:
-                    # We are not reassigning to a variable, but creating a new one
-                    # Only do this if we can work out the type of the value
-                    computed_type = value.get_type()
-                    new_id = self._create_local(target.id, computed_type)
-                    expressions.append(self.module.local_set(new_id, value))
-
-                case (int(), int()):
-                    index = target_value[0]
-                    target_type = target_value[1]
-                    if not value.get_type() == target_type:
-                        raise RuntimeError("Cannot change the type of a variable")
-                    expressions.append(self.module.local_set(index, value))
-
-                case (binaryen.Expression(), binaryen.Expression()):
-                    # NOTE: Assuming array here
-                    # TODO: support structs
-                    array = target_value[0]
-                    index = target_value[1]
-                    array_heap_type = binaryen.type.get_heap_type(array.get_type())
-
-                    if not binaryen.type.heap_type.is_array(array_heap_type):
-                        raise RuntimeError("Expected array")
-
-                    expressions.append(self.module.array_set(array, index, value))
-
-                case _:
-                    raise RuntimeError(
-                        f"Assigning target {target} ({target_value} type:{type(target)}) to {node.value} ({value} type:{type(node.value)}) on line {target.lineno}"
-                    )
-
-        if len(expressions) > 1:
-            return self.module.block(None, expressions, binaryen.type.TypeNone)
-
-        if len(expressions) == 0:
-            return self.module.nop()
-
-        return expressions[0]
-
-    def visit_AnnAssign(self, node: AnnAssign):
-        if not self.in_wasm_function:
-            # TODO: No globals atm
-            return
-
-        if not isinstance(node.target, Name):
-            raise NotImplementedError
-
-        if not node.simple:
-            # A node is not simple if it uses tuples, attributes or subscripts
-            # e.g. (a): int = 1, a.b: int, a[1]: int
-            raise NotImplementedError
-
-        name = node.target.id
-        value = self.visit(node.value) if node.value is not None else None
-        type_annotation = self._get_binaryen_type(node.annotation)
-
-        # TODO: We assume the variable is local (TODO: Lookup in symtable)
-        existing_variable = self._get_local_by_name(name)
-
-        local_id = None
-        if existing_variable is not None:
-            (local_id, existing_type) = existing_variable
-
-            if existing_type != type_annotation:
-                # TODO: Add a work around. Delete the old variable and make a new one?
-                raise RuntimeError(
-                    "You cannot change the type of a variable when reassigning"
-                )
-            if value is None:
-                raise RuntimeError(
-                    "You cannot redeclare a variable in the same namespace"
-                )
-        else:
-            local_id = self._create_local(name, type_annotation)
-
-        if value is not None:
-            cast_value = self._cast_numeric_to_type(value, type_annotation, node.lineno)
-            return self.module.local_set(local_id, cast_value)
-
-        return self.module.nop()
-
-    def visit_AugAssign(self, node: AugAssign):
-        if not isinstance(node.target, Name):
-            raise NotImplementedError(
-                "Probably aug-assigning with subscript or dot notation. Not currently supported."
-            )
-        load_target = Name(id=node.target.id, ctx=Load())
-        operation = BinOp(
-            left=load_target, op=node.op, right=node.value, lineno=node.lineno
-        )
-        hijacked_node = Assign(targets=[node.target], value=operation)
-        return self.visit_Assign(hijacked_node)
+    # visit_Expression
+    # visit_FunctionType
 
     def visit_FunctionDef(self, node: FunctionDef):
         """Check if function has the binaryen decorator @binaryen.func"""
@@ -415,6 +309,211 @@ class Compiler(NodeTransformer):
         self.in_wasm_function = False
         self.var_stack = []
 
+    # visit_AsyncFunctionDef
+    # visit_ClassDef
+
+    def visit_Return(self, node: Return):
+        if not self.in_wasm_function:
+            raise NotImplementedError
+
+        value = super().visit(node.value) if node.value is not None else None
+        return self.module.Return(value)
+
+    # visit_Delete
+
+    def visit_Assign(self, node: Assign):
+        if not self.in_wasm_function:
+            # TODO: No globals atm
+            return
+
+        expressions = []
+        value = self.visit(node.value)
+        if not isinstance(value, binaryen.Expression):
+            raise RuntimeError("Expected Binaryen value")
+
+        # LocalSet, GlobalSet, Store?, StructSet, ArraySet
+        # (int, type), (str, type), ? , ?, (Array:Exp, Index:Exp)
+        for target in node.targets:
+            target_value = self.visit(target)
+
+            match target_value:
+                case None:
+                    # We are not reassigning to a variable, but creating a new one
+                    # Only do this if we can work out the type of the value
+                    computed_type = value.get_type()
+                    new_id = self._create_local(target.id, computed_type)
+                    expressions.append(self.module.local_set(new_id, value))
+
+                case (int(), int()):
+                    index = target_value[0]
+                    target_type = target_value[1]
+                    if not value.get_type() == target_type:
+                        raise RuntimeError("Cannot change the type of a variable")
+                    expressions.append(self.module.local_set(index, value))
+
+                case (binaryen.Expression(), binaryen.Expression()):
+                    # NOTE: Assuming array here
+                    # TODO: support structs
+                    array = target_value[0]
+                    index = target_value[1]
+                    array_heap_type = binaryen.type.get_heap_type(array.get_type())
+
+                    if not binaryen.type.heap_type.is_array(array_heap_type):
+                        raise RuntimeError("Expected array")
+
+                    expressions.append(self.module.array_set(array, index, value))
+
+                case _:
+                    raise RuntimeError(
+                        f"Assigning target {target} ({target_value} type:{type(target)}) to {node.value} ({value} type:{type(node.value)}) on line {target.lineno}"
+                    )
+
+        if len(expressions) > 1:
+            return self.module.block(None, expressions, binaryen.type.TypeNone)
+
+        if len(expressions) == 0:
+            return self.module.nop()
+
+        return expressions[0]
+
+    # visit_TypeAlias
+
+    def visit_AugAssign(self, node: AugAssign):
+        if not isinstance(node.target, Name):
+            raise NotImplementedError(
+                "Probably aug-assigning with subscript or dot notation. Not currently supported."
+            )
+        load_target = Name(id=node.target.id, ctx=Load())
+        operation = BinOp(
+            left=load_target, op=node.op, right=node.value, lineno=node.lineno
+        )
+        hijacked_node = Assign(targets=[node.target], value=operation)
+        return self.visit_Assign(hijacked_node)
+
+    def visit_AnnAssign(self, node: AnnAssign):
+        if not self.in_wasm_function:
+            # TODO: No globals atm
+            return
+
+        if not isinstance(node.target, Name):
+            raise NotImplementedError
+
+        if not node.simple:
+            # A node is not simple if it uses tuples, attributes or subscripts
+            # e.g. (a): int = 1, a.b: int, a[1]: int
+            raise NotImplementedError
+
+        name = node.target.id
+        value = self.visit(node.value) if node.value is not None else None
+        type_annotation = self._get_binaryen_type(node.annotation)
+
+        # TODO: We assume the variable is local (TODO: Lookup in symtable)
+        existing_variable = self._get_local_by_name(name)
+
+        local_id = None
+        if existing_variable is not None:
+            (local_id, existing_type) = existing_variable
+
+            if existing_type != type_annotation:
+                # TODO: Add a work around. Delete the old variable and make a new one?
+                raise RuntimeError(
+                    "You cannot change the type of a variable when reassigning"
+                )
+            if value is None:
+                raise RuntimeError(
+                    "You cannot redeclare a variable in the same namespace"
+                )
+        else:
+            local_id = self._create_local(name, type_annotation)
+
+        if value is not None:
+            cast_value = self._cast_numeric_to_type(value, type_annotation, node.lineno)
+            return self.module.local_set(local_id, cast_value)
+
+        return self.module.nop()
+
+    # visit_For
+    # visit_AsyncFor
+
+    def visit_While(self, node: While):
+        if not self.in_wasm_function:
+            raise NotImplementedError
+
+        loop_condition = super().visit(node.test)
+
+        self.while_stack.append(id(node))
+
+        loop_body = []
+        for python_exp in node.body:
+            wasm_exp = super().visit(python_exp)
+            loop_body.append(wasm_exp)
+
+        cur_id = self.while_stack.pop()
+
+        else_body = []
+        for python_exp in node.orelse:
+            wasm_exp = super().visit(python_exp)
+            else_body.append(wasm_exp)
+
+        else_block = (
+            self.module.block(
+                f"loop_else_{cur_id}".encode("ascii"),
+                else_body,
+                binaryen.type.TypeNone,
+            )
+            if len(else_body) > 0
+            else self.module.nop()
+        )
+
+        restart_loop = self.module.Break(f"loop_{cur_id}".encode("ascii"), None, None)
+
+        body = self.module.block(
+            f"loop_body_{cur_id}".encode("ascii"),
+            [*loop_body, restart_loop],
+            binaryen.type.TypeNone,
+        )
+
+        loop_test = self.module.If(loop_condition, body, else_block)
+
+        loop = self.module.loop(f"loop_{cur_id}".encode("ascii"), loop_test)
+
+        return loop
+
+    def visit_If(self, node: If):
+        if not self.in_wasm_function:
+            raise NotImplementedError
+
+        condition = super().visit(node.test)
+
+        if_true = self.module.block(None, [], binaryen.type.Auto)
+        if_false = self.module.block(None, [], binaryen.type.Auto)
+
+        for python_exp in node.body:
+            wasm_exp = super().visit(python_exp)
+            if_true.append_child(wasm_exp)
+
+        for python_exp in node.orelse:
+            wasm_exp = super().visit(python_exp)
+            if_false.append_child(wasm_exp)
+
+        return self.module.If(condition, if_true, if_false)
+
+    # visit_With
+    # visit_AsyncWith
+    # visit_Match
+    # visit_Raise
+    # visit_Try
+    # visit_TryStar
+
+    def visit_Assert(self, node: Assert):
+        if node.msg is not None:
+            raise RuntimeError("Assertion messages are not supported")
+        # TODO: We should write an error message to stderr
+
+        condition = super().visit(node.test)
+        check = self.module.If(condition, self.module.nop(), self.module.unreachable())
+        return check
+
     def visit_Import(self, node: Import):
         # Record if pygwasm is imported, or if its imported under an alias
         for module in node.names:
@@ -443,86 +542,29 @@ class Compiler(NodeTransformer):
                 self.object_aliases[function.name] = function.name
         return
 
-    def visit_Name(self, node: Name):
-        # PYTHON RULE: Local -> Enclosing -> Global -> Built-in
-        # Name could be
-        # LocalSet, GlobalSet, Store?, StructSet, ArraySet
+    # visit_Global
+    # visit_Nonlocal
+    # visit_Expr
 
-        var = self._get_local_by_name(node.id)
+    def visit_Pass(self, _: Pass):
+        return self.module.nop()
 
-        # TODO: Assuming local variable
-        if isinstance(node.ctx, Load):
-            if var is None:
-                raise RuntimeError("Trying to load an undeclared variable")
-            (index, var_type) = var
-            return self.module.local_get(index, var_type)
-        if isinstance(node.ctx, Store):
-            return var
-        if isinstance(node.ctx, Del):
-            raise NotImplementedError
+    def visit_Break(self, _: Break):
+        if len(self.while_stack) == 0:
+            raise RuntimeError("Break can only be used in a while loop")
+        loop_id = self.while_stack[-1]
+        loop_name = f"loop_body_{loop_id}".encode("ascii")
+        return self.module.Break(loop_name, None, None)
 
-    def visit_Constant(self, node: Constant):
-        if node.value is None:
-            raise NotImplementedError
-        if isinstance(node.value, str):
-            # TODO: Don't ascii encode
-            return self.module.string_const(node.value.encode("ascii"))
-        if isinstance(node.value, int):
-            # TODO: Should probably bounds check this!!!
-            # TODO: This should be explicit! Explicitly decide on int32 signed/unsigned
-            value = binaryen.literal.int32(node.value)
-            return self.module.const(value)
-        if isinstance(node.value, float):
-            value = binaryen.literal.float32(node.value)
-            return self.module.const(value)
-        # From the docs:
-        # The values represented can be simple types such as a number, string or None, but also immutable container types (tuples and frozensets) if all of their elements are constant.
-        raise NotImplementedError
+    def visit_Continue(self, _: Continue):
+        if len(self.while_stack) == 0:
+            raise RuntimeError("Break can only be used in a while loop")
+        loop_id = self.while_stack[-1]
+        loop_name = f"loop_{loop_id}".encode("ascii")
+        return self.module.Break(loop_name, None, None)
 
-    def visit_List(self, node: List):
-        # TODO: Don't assume its i32
-        tb = binaryen.TypeBuilder(1)
-        tb.set_array_type(0, Int32, binaryen.type.NotPacked, True)
-        Int32ArrayHeap = tb.build()[0]
-
-        elements = []
-        for el in node.elts:
-            wasm_el = super().visit(el)
-            elements.append(wasm_el)
-        return self.module.array_new_fixed(Int32ArrayHeap, elements)
-
-    def visit_Subscript(self, node: Subscript):
-        value = self.visit(node.value)
-        if not isinstance(value, binaryen.Expression):
-            raise RuntimeError("Expected Binaryen Expression for subscript value")
-
-        index = self.visit(node.slice)
-        if not isinstance(index, binaryen.Expression):
-            raise RuntimeError("Expected Binaryen Expression for index value")
-
-        value_type = value.get_type()
-        value_heap_type = binaryen.type.get_heap_type(value_type)
-
-        match node.ctx:
-            case Load():
-                if binaryen.type.heap_type.is_array(value_heap_type):
-                    return self.module.array_get(
-                        value, index, binaryen.type.Auto, False
-                    )
-                raise NotImplementedError(
-                    f"Cannot load subscript on {value_type} ({value_heap_type})"
-                )
-            case Store():
-                return (value, index)
-            case Del():
-                raise NotImplementedError("Cannot delete with subscript")
-
-    def visit_Return(self, node: Return):
-        if not self.in_wasm_function:
-            raise NotImplementedError
-
-        value = super().visit(node.value) if node.value is not None else None
-        return self.module.Return(value)
+    # visit_BoolOp
+    # visit_NamedExpr
 
     def visit_BinOp(self, node: BinOp):
         if not self.in_wasm_function:
@@ -610,94 +652,18 @@ class Compiler(NodeTransformer):
 
         return self.module.binary(op, cast_left, cast_right)
 
-    def visit_If(self, node: If):
-        if not self.in_wasm_function:
-            raise NotImplementedError
-
-        condition = super().visit(node.test)
-
-        if_true = self.module.block(None, [], binaryen.type.Auto)
-        if_false = self.module.block(None, [], binaryen.type.Auto)
-
-        for python_exp in node.body:
-            wasm_exp = super().visit(python_exp)
-            if_true.append_child(wasm_exp)
-
-        for python_exp in node.orelse:
-            wasm_exp = super().visit(python_exp)
-            if_false.append_child(wasm_exp)
-
-        return self.module.If(condition, if_true, if_false)
-
-    def visit_While(self, node: While):
-        if not self.in_wasm_function:
-            raise NotImplementedError
-
-        loop_condition = super().visit(node.test)
-
-        self.while_stack.append(id(node))
-
-        loop_body = []
-        for python_exp in node.body:
-            wasm_exp = super().visit(python_exp)
-            loop_body.append(wasm_exp)
-
-        cur_id = self.while_stack.pop()
-
-        else_body = []
-        for python_exp in node.orelse:
-            wasm_exp = super().visit(python_exp)
-            else_body.append(wasm_exp)
-
-        else_block = (
-            self.module.block(
-                f"loop_else_{cur_id}".encode("ascii"),
-                else_body,
-                binaryen.type.TypeNone,
-            )
-            if len(else_body) > 0
-            else self.module.nop()
-        )
-
-        restart_loop = self.module.Break(f"loop_{cur_id}".encode("ascii"), None, None)
-
-        body = self.module.block(
-            f"loop_body_{cur_id}".encode("ascii"),
-            [*loop_body, restart_loop],
-            binaryen.type.TypeNone,
-        )
-
-        loop_test = self.module.If(loop_condition, body, else_block)
-
-        loop = self.module.loop(f"loop_{cur_id}".encode("ascii"), loop_test)
-
-        return loop
-
-    def visit_Break(self, _: Break):
-        if len(self.while_stack) == 0:
-            raise RuntimeError("Break can only be used in a while loop")
-        loop_id = self.while_stack[-1]
-        loop_name = f"loop_body_{loop_id}".encode("ascii")
-        return self.module.Break(loop_name, None, None)
-
-    def visit_Continue(self, _: Continue):
-        if len(self.while_stack) == 0:
-            raise RuntimeError("Break can only be used in a while loop")
-        loop_id = self.while_stack[-1]
-        loop_name = f"loop_{loop_id}".encode("ascii")
-        return self.module.Break(loop_name, None, None)
-
-    def visit_Pass(self, _: Pass):
-        return self.module.nop()
-
-    def visit_Assert(self, node: Assert):
-        if node.msg is not None:
-            raise RuntimeError("Assertion messages are not supported")
-        # TODO: We should write an error message to stderr
-
-        condition = super().visit(node.test)
-        check = self.module.If(condition, self.module.nop(), self.module.unreachable())
-        return check
+    # visit_UnaryOp
+    # visit_Lambda
+    # visit_IfExp
+    # visit_Dict
+    # visit_Set
+    # visit_ListComp
+    # visit_SetComp
+    # visit_DictComp
+    # visit_GeneratorExp
+    # visit_Await
+    # visit_Yield
+    # visit_YieldFrom
 
     def visit_Compare(self, node: Compare):
         if len(node.comparators) > 1 or len(node.ops) > 1:
@@ -820,6 +786,90 @@ class Compiler(NodeTransformer):
             args.append(arg_exp)
         # TODO: Actually find out the return type dont just hard code it lol
         return self.module.call(name, args, Int32)
+
+    # visit_FormattedValue
+    # visit_JoinedStr
+
+    def visit_Constant(self, node: Constant):
+        if node.value is None:
+            raise NotImplementedError
+        if isinstance(node.value, str):
+            # TODO: Don't ascii encode
+            return self.module.string_const(node.value.encode("ascii"))
+        if isinstance(node.value, int):
+            # TODO: Should probably bounds check this!!!
+            # TODO: This should be explicit! Explicitly decide on int32 signed/unsigned
+            value = binaryen.literal.int32(node.value)
+            return self.module.const(value)
+        if isinstance(node.value, float):
+            value = binaryen.literal.float32(node.value)
+            return self.module.const(value)
+        # From the docs:
+        # The values represented can be simple types such as a number, string or None, but also immutable container types (tuples and frozensets) if all of their elements are constant.
+        raise NotImplementedError
+
+    # visit_Attribute
+
+    def visit_Subscript(self, node: Subscript):
+        value = self.visit(node.value)
+        if not isinstance(value, binaryen.Expression):
+            raise RuntimeError("Expected Binaryen Expression for subscript value")
+
+        index = self.visit(node.slice)
+        if not isinstance(index, binaryen.Expression):
+            raise RuntimeError("Expected Binaryen Expression for index value")
+
+        value_type = value.get_type()
+        value_heap_type = binaryen.type.get_heap_type(value_type)
+
+        match node.ctx:
+            case Load():
+                if binaryen.type.heap_type.is_array(value_heap_type):
+                    return self.module.array_get(
+                        value, index, binaryen.type.Auto, False
+                    )
+                raise NotImplementedError(
+                    f"Cannot load subscript on {value_type} ({value_heap_type})"
+                )
+            case Store():
+                return (value, index)
+            case Del():
+                raise NotImplementedError("Cannot delete with subscript")
+
+    # visit_Starred
+
+    def visit_Name(self, node: Name):
+        # PYTHON RULE: Local -> Enclosing -> Global -> Built-in
+        # Name could be
+        # LocalSet, GlobalSet, Store?, StructSet, ArraySet
+
+        var = self._get_local_by_name(node.id)
+
+        # TODO: Assuming local variable
+        if isinstance(node.ctx, Load):
+            if var is None:
+                raise RuntimeError("Trying to load an undeclared variable")
+            (index, var_type) = var
+            return self.module.local_get(index, var_type)
+        if isinstance(node.ctx, Store):
+            return var
+        if isinstance(node.ctx, Del):
+            raise NotImplementedError
+
+    def visit_List(self, node: List):
+        # TODO: Don't assume its i32
+        tb = binaryen.TypeBuilder(1)
+        tb.set_array_type(0, Int32, binaryen.type.NotPacked, True)
+        Int32ArrayHeap = tb.build()[0]
+
+        elements = []
+        for el in node.elts:
+            wasm_el = super().visit(el)
+            elements.append(wasm_el)
+        return self.module.array_new_fixed(Int32ArrayHeap, elements)
+
+    # visit_Tuple
+    # visit_Slice
 
     def generic_visit(self, node):
         raise RuntimeError(
