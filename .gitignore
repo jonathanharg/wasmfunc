@@ -1,6 +1,8 @@
 /*.wasm
 /*.wat
 
+TODO.md
+
 .DS_Store
 
 # Byte-compiled / optimized / DLL files

@@ -1,2 +1,0 @@
-recursive-include examples *.py
-prune examples/__pycache__

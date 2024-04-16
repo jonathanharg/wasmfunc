@@ -28,6 +28,7 @@ from ast import (
     Import,
     ImportFrom,
     In,
+    Invert,
     Is,
     IsNot,
     List,
@@ -41,6 +42,7 @@ from ast import (
     Mult,
     Name,
     NodeTransformer,
+    Not,
     NotEq,
     NotIn,
     Pass,
@@ -50,6 +52,9 @@ from ast import (
     Store,
     Sub,
     Subscript,
+    UAdd,
+    USub,
+    UnaryOp,
     While,
     expr,
 )
@@ -75,6 +80,7 @@ class Compiler(NodeTransformer):
         self.object_aliases = {}
         self.in_wasm_function = False
         self.var_stack: list[tuple[str, BinaryenType]] = []
+        self.current_function_return: BinaryenType | None = None
         self.while_stack = [0]
         # TODO: Make this a user option
         self.module.set_feature(binaryen.Feature.GC | binaryen.Feature.ReferenceTypes)
@@ -280,6 +286,7 @@ class Compiler(NodeTransformer):
             function_argument_types.append(argument_type)
 
         return_type = self._get_binaryen_type(node.returns)
+        self.current_function_return = return_type
 
         body = self.module.block(None, [], return_type)
 
@@ -294,7 +301,7 @@ class Compiler(NodeTransformer):
         local_variables = self.var_stack[len(node.args.args) :]
         local_variable_types = list(map(lambda x: x[1], local_variables))
 
-        function_ref = self.module.add_function(
+        self.module.add_function(
             name,
             binaryen.type.create(function_argument_types),
             return_type,
@@ -308,6 +315,7 @@ class Compiler(NodeTransformer):
 
         self.in_wasm_function = False
         self.var_stack = []
+        self.current_function_return = None
 
     # visit_AsyncFunctionDef
     # visit_ClassDef
@@ -316,8 +324,15 @@ class Compiler(NodeTransformer):
         if not self.in_wasm_function:
             raise NotImplementedError
 
-        value = super().visit(node.value) if node.value is not None else None
-        return self.module.Return(value)
+        value = (
+            super().visit(node.value) if node.value is not None else self.module.nop()
+        )
+
+        # TODO: This only works with numeric types
+        casted_value = self._cast_numeric_to_type(
+            value, self.current_function_return, node.lineno
+        )
+        return self.module.Return(casted_value)
 
     # visit_Delete
 
@@ -481,7 +496,8 @@ class Compiler(NodeTransformer):
 
     def visit_If(self, node: If):
         if not self.in_wasm_function:
-            raise NotImplementedError
+            # raise NotImplementedError
+            return
 
         condition = super().visit(node.test)
 
@@ -581,78 +597,155 @@ class Compiler(NodeTransformer):
             case Add():
                 match op_type:
                     case binaryen.type.Int32:
-                        op = binaryen.operations.AddInt32()
+                        add_op = binaryen.operations.AddInt32()
                     case binaryen.type.Int64:
-                        op = binaryen.operations.AddInt64()
+                        add_op = binaryen.operations.AddInt64()
                     case binaryen.type.Float32:
-                        op = binaryen.operations.AddFloat32()
+                        add_op = binaryen.operations.AddFloat32()
                     case binaryen.type.Float64:
-                        op = binaryen.operations.AddFloat64()
+                        add_op = binaryen.operations.AddFloat64()
                     case _:
                         raise RuntimeError("Can't add non numeric wasm types")
+                return self.module.binary(add_op, cast_left, cast_right)
             case Sub():
                 match op_type:
                     case binaryen.type.Int32:
-                        op = binaryen.operations.SubInt32()
+                        sub_op = binaryen.operations.SubInt32()
                     case binaryen.type.Int64:
-                        op = binaryen.operations.SubInt64()
+                        sub_op = binaryen.operations.SubInt64()
                     case binaryen.type.Float32:
-                        op = binaryen.operations.SubFloat32()
+                        sub_op = binaryen.operations.SubFloat32()
                     case binaryen.type.Float64:
-                        op = binaryen.operations.SubFloat64()
+                        sub_op = binaryen.operations.SubFloat64()
                     case _:
                         raise RuntimeError("Can't subtract non numeric wasm types")
+                return self.module.binary(sub_op, cast_left, cast_right)
             case Mult():
                 match op_type:
                     case binaryen.type.Int32:
-                        op = binaryen.operations.MulInt32()
+                        mult_op = binaryen.operations.MulInt32()
                     case binaryen.type.Int64:
-                        op = binaryen.operations.MulInt64()
+                        mult_op = binaryen.operations.MulInt64()
                     case binaryen.type.Float32:
-                        op = binaryen.operations.MulFloat32()
+                        mult_op = binaryen.operations.MulFloat32()
                     case binaryen.type.Float64:
-                        op = binaryen.operations.MulFloat64()
+                        mult_op = binaryen.operations.MulFloat64()
+                    case _:
+                        raise RuntimeError("Can't multiply non numeric wasm types")
+                return self.module.binary(mult_op, cast_left, cast_right)
+            case Div():
+                match op_type:
+                    case binaryen.type.Int32:
+                        left_float = self._cast_numeric_to_type(
+                            left, binaryen.type.Float32, node.lineno
+                        )
+                        right_float = self._cast_numeric_to_type(
+                            left, binaryen.type.Float32, node.lineno
+                        )
+                        return self.module.binary(
+                            binaryen.operations.DivFloat32(), left_float, right_float
+                        )
+                    case binaryen.type.Int64:
+                        left_float = self._cast_numeric_to_type(
+                            left, binaryen.type.Float64, node.lineno
+                        )
+                        right_float = self._cast_numeric_to_type(
+                            left, binaryen.type.Float64, node.lineno
+                        )
+                        return self.module.binary(
+                            binaryen.operations.DivFloat64(), left_float, right_float
+                        )
+                    case binaryen.type.Float32:
+                        return self.module.binary(
+                            binaryen.operations.DivFloat32(), cast_left, cast_right
+                        )
+                    case binaryen.type.Float64:
+                        return self.module.binary(
+                            binaryen.operations.DivFloat64(), cast_left, cast_right
+                        )
                     case _:
                         raise RuntimeError("Can't multiply non numeric wasm types")
             case Mod():
                 match op_type:
                     # TODO: Assuming signed
                     case binaryen.type.Int32:
-                        op = binaryen.operations.RemSInt32()
+                        mod_op = binaryen.operations.RemSInt32()
                     case binaryen.type.Int64:
-                        op = binaryen.operations.RemSInt64()
+                        mod_op = binaryen.operations.RemSInt64()
                     case _:
                         raise RuntimeError("Can't do modulus on non integer wasm types")
+                return self.module.binary(mod_op, cast_left, cast_right)
             case FloorDiv():
+                # NOTE: Python has strange floor division because of PEP 238
+                # In python: a // b == floor(a/b)
+                # TODO: Fix this so it matches python?
                 match op_type:
                     # TODO: Assuming signed
                     case binaryen.type.Int32:
-                        op = binaryen.operations.DivSInt32()
+                        return self.module.binary(
+                            binaryen.operations.DivSInt32(), cast_left, cast_right
+                        )
                     case binaryen.type.Int64:
-                        op = binaryen.operations.DivSInt64()
+                        return self.module.binary(
+                            binaryen.operations.DivSInt64(), cast_left, cast_right
+                        )
                     case binaryen.type.Float32:
-                        op = binaryen.operations.DivFloat32()
+                        result = self.module.binary(
+                            binaryen.operations.DivFloat32(), cast_left, cast_right
+                        )
+                        return self.module.unary(
+                            binaryen.operations.FloorFloat32(), result
+                        )
                     case binaryen.type.Float64:
-                        op = binaryen.operations.DivFloat64()
+                        result = self.module.binary(
+                            binaryen.operations.DivFloat64(), cast_left, cast_right
+                        )
+                        return self.module.unary(
+                            binaryen.operations.FloorFloat64(), result
+                        )
                     case _:
                         raise RuntimeError("Can't multiply non numeric wasm types")
             case (
-                MatMult()
-                | Div()
-                | Pow()
-                | LShift()
-                | RShift()
-                | BitOr()
-                | BitXor()
-                | BitAnd()
+                MatMult() | Pow() | LShift() | RShift() | BitOr() | BitXor() | BitAnd()
             ):
                 raise NotImplementedError
             case _:
                 raise NotImplementedError
 
-        return self.module.binary(op, cast_left, cast_right)
+    def visit_UnaryOp(self, node: UnaryOp):
+        value = super().visit(node.operand)
+        op_type = value.get_type()
+        match node.op:
+            case UAdd():
+                # Unary Add does nothing
+                return value
+            case USub():
+                match op_type:
+                    case binaryen.type.Int32:
+                        return self.module.binary(
+                            binaryen.operations.MulInt32(), self.module.i32(-1), value
+                        )
+                    case binaryen.type.Int64:
+                        return self.module.binary(
+                            binaryen.operations.MulInt64(), self.module.i64(-1), value
+                        )
+                    case binaryen.type.Float32:
+                        return self.module.unary(
+                            binaryen.operations.NegFloat32(), value
+                        )
+                    case binaryen.type.Float64:
+                        return self.module.unary(
+                            binaryen.operations.NegFloat64(), value
+                        )
+                    case _:
+                        raise RuntimeError(
+                            "Can't do unary subtraction on non numeric wasm types"
+                        )
+            case Not():
+                raise NotImplementedError
+            case Invert():
+                raise NotImplementedError
 
-    # visit_UnaryOp
     # visit_Lambda
     # visit_IfExp
     # visit_Dict
