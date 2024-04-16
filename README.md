@@ -1,11 +1,11 @@
-# PyGWasm
+# Py2Wasm
 
-PyGWasm (Python Generates Wasm) is a Python to WebAssembly Compiler built for converting a typed subset of python  code to a compiled Wasm binary.
+Py2Wasm (Python Generates Wasm) is a Python to WebAssembly Compiler built for converting a typed subset of python  code to a compiled Wasm binary.
 
 ## Installation
 
 ```bash
-pip install pygwasm
+pip install py2wasm
 ```
 
 ## How to use
@@ -25,8 +25,8 @@ def fib_recursive(n: i32) -> i32:
 Then compile with
 
 ```bash
-pygwasm fib.py
-# Or python -m pygwasm fib.py
+py2wasm fib.py
+# Or python -m py2wasm fib.py
 ```
 
 For more examples see [examples](examples/).

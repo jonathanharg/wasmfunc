@@ -1,5 +1,5 @@
 [project]
-name = "pygwasm"
+name = "Py2Wasm"
 version = "0.0.1"
 description = "A WebAssembly compiler for Python"
 authors = [
@@ -27,8 +27,8 @@ dependencies = [
 ]
 
 [project.urls]
-"Source Code" = "https://github.com/jonathanharg/pygwasm"
-Issues = "https://github.com/jonathanharg/pygwasm/issues"
+"Source Code" = "https://github.com/jonathanharg/py2wasm"
+Issues = "https://github.com/jonathanharg/py2wasm/issues"
 
 [project.optional-dependencies]
 dev = ["black", "isort", "wasmtime","pytest", "build"]

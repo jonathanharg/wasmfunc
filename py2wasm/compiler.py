@@ -99,11 +99,11 @@ class Compiler(NodeTransformer):
         )
 
     def _get_binaryen_type(self, node: expr | None):
-        """Convert a pygwasm annotation e.g. x:pygwasm.i32 to a binaryen type object e.g: binaryen.type.Int32()"""
-        # Annotations are either Attribute(Name) e.g. pygwasm.i32
-        # Or are Name e.g. by using `from pygwasm import i32`
-        # Note that both the Attribute and Name can be aliased because of `import pygwasm as p`
-        # Or `from pygwasm import i32 as integer32`
+        """Convert a py2wasm annotation e.g. x:py2wasm.i32 to a binaryen type object e.g: binaryen.type.Int32()"""
+        # Annotations are either Attribute(Name) e.g. py2wasm.i32
+        # Or are Name e.g. by using `from py2wasm import i32`
+        # Note that both the Attribute and Name can be aliased because of `import py2wasm as p`
+        # Or `from py2wasm import i32 as integer32`
 
         if node is None:
             return None
@@ -531,21 +531,21 @@ class Compiler(NodeTransformer):
         return check
 
     def visit_Import(self, node: Import):
-        # Record if pygwasm is imported, or if its imported under an alias
+        # Record if py2wasm is imported, or if its imported under an alias
         for module in node.names:
             print(f"Found import for {module.name}")
-            if module.name == "pygwasm":
+            if module.name == "py2wasm":
                 if module.asname is not None:
                     print(f"Appending alias {module.asname}")
                     self.module_aliases.append(module.asname)
                 else:
                     print("Appending default alias")
-                    self.module_aliases.append("pygwasm")
+                    self.module_aliases.append("py2wasm")
         return
 
     def visit_ImportFrom(self, node: ImportFrom):
-        # Record if the pygwasm decorator is imported, or if its imported under an alias
-        if node.module != "pygwasm":
+        # Record if the py2wasm decorator is imported, or if its imported under an alias
+        if node.module != "py2wasm":
             print("Found non binaryen import from")
             return
         for function in node.names:
@@ -869,7 +869,7 @@ class Compiler(NodeTransformer):
 
     def visit_Call(self, node: Call):
         if len(node.keywords) > 0:
-            print("Pygwasm does not support keyword arguments!")
+            print("py2wasm does not support keyword arguments!")
             raise NotImplementedError
         assert isinstance(node.func, Name)
         name = bytes(node.func.id, "ascii")
@@ -966,5 +966,5 @@ class Compiler(NodeTransformer):
 
     def generic_visit(self, node):
         raise RuntimeError(
-            f"Node of type {node.__class__.__name__} is not supported by pygwasm. Line number {node.lineno if hasattr(node, 'lineno') else '?'}"
+            f"Node of type {node.__class__.__name__} is not supported by py2wasm. Line number {node.lineno if hasattr(node, 'lineno') else '?'}"
         )

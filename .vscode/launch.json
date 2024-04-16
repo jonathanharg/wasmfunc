@@ -5,10 +5,10 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: Test Pygwasm",
+            "name": "Python: Test Py2Wasm",
             "type": "python",
             "request": "launch",
-            "module": "pygwasm",
+            "module": "py2wasm",
             "justMyCode": true,
             "args": ["${file}"]
         },
@@ -22,10 +22,10 @@
             "args": ["examples/add.py"]
         },
         {
-            "name": "Compile File with Pygwasm",
+            "name": "Compile File with Py2Wasm",
             "type": "debugpy",
             "request": "launch",
-            "module": "pygwasm",
+            "module": "py2wasm",
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": ["${file}"]

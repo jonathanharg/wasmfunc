@@ -1,4 +1,4 @@
-from pygwasm import f32, func
+from py2wasm import f32, func
 
 
 @func

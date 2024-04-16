@@ -1,1 +1,1 @@
-import pygwasm
+import py2wasm

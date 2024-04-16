@@ -1,4 +1,4 @@
-from pygwasm import func, i32
+from py2wasm import func, i32
 
 
 # NOTE: Works up until n = 47

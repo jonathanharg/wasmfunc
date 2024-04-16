@@ -1,6 +1,6 @@
-from pygwasm import func, i32
+from py2wasm import func, i32
 
-# @pygwasm.func
+# @py2wasm.func
 # def fib(n):
 #     """Print the Fibonacci series up to n."""
 #     a, b = 0, 1
@@ -11,7 +11,7 @@ from pygwasm import func, i32
 #     print()
 
 
-# # @pygwasm.func
+# # @py2wasm.func
 # def hello():
 #     message: str
 #     message = "Hello world"
