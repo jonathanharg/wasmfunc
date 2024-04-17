@@ -1,6 +1,6 @@
 # Py2Wasm
 
-Py2Wasm (Python Generates Wasm) is a Python to WebAssembly Compiler built for converting a typed subset of python  code to a compiled Wasm binary.
+Py2Wasm is a Python to WebAssembly Compiler built for converting a typed subset of python  code to a compiled Wasm binary.
 
 ## Installation
 

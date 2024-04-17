@@ -241,7 +241,6 @@ class Compiler(NodeTransformer):
         return self.module.unary(op, target)
 
     def visit_Module(self, node: Module):
-        print("Creating WASM Module")
         super().generic_visit(node)
 
     # visit_Expression
@@ -262,7 +261,6 @@ class Compiler(NodeTransformer):
                     break
 
         if not contains_wasm:
-            print(f"Skipping non WASM Function {node.name}")
             return
 
         if self.in_wasm_function:
@@ -310,8 +308,9 @@ class Compiler(NodeTransformer):
         )
         self.module.auto_drop()
         self.module.add_function_export(name, name)
-        print(f"Finished compiling {node.name}, valid: {self.module.validate()}")
-        # self.module.print()
+
+        if not self.module.validate():
+            raise RuntimeError("Wasm module is not valid!")
 
         self.in_wasm_function = False
         self.var_stack = []
@@ -533,20 +532,17 @@ class Compiler(NodeTransformer):
     def visit_Import(self, node: Import):
         # Record if py2wasm is imported, or if its imported under an alias
         for module in node.names:
-            print(f"Found import for {module.name}")
             if module.name == "py2wasm":
                 if module.asname is not None:
-                    print(f"Appending alias {module.asname}")
                     self.module_aliases.append(module.asname)
                 else:
-                    print("Appending default alias")
                     self.module_aliases.append("py2wasm")
         return
 
     def visit_ImportFrom(self, node: ImportFrom):
         # Record if the py2wasm decorator is imported, or if its imported under an alias
         if node.module != "py2wasm":
-            print("Found non binaryen import from")
+            # print("Found non binaryen import from")
             return
         for function in node.names:
             if function.asname is not None:
@@ -761,10 +757,9 @@ class Compiler(NodeTransformer):
     def visit_Compare(self, node: Compare):
         if len(node.comparators) > 1 or len(node.ops) > 1:
             # TODO: Supported chained comparisons
-            print(
+            raise NotImplementedError(
                 "Error: Chained comparisons e.g. 1 <= a < 10 are not currently supported. Please use brackets."
             )
-            raise NotImplementedError
 
         if not self.in_wasm_function:
             raise NotImplementedError
@@ -869,8 +864,7 @@ class Compiler(NodeTransformer):
 
     def visit_Call(self, node: Call):
         if len(node.keywords) > 0:
-            print("py2wasm does not support keyword arguments!")
-            raise NotImplementedError
+            raise NotImplementedError("py2wasm does not support keyword arguments!")
         assert isinstance(node.func, Name)
         name = bytes(node.func.id, "ascii")
         args = []
