@@ -96,6 +96,7 @@ class Compiler(NodeTransformer):
         self.while_stack = [0]
 
         if enable_gc:
+            print("Warning: using WasmGC, this is experimental")
             self.module.set_feature(
                 binaryen.Feature.GC | binaryen.Feature.ReferenceTypes
             )
@@ -227,9 +228,9 @@ class Compiler(NodeTransformer):
         op = self._get_numeric_conversion_op(target, convert_to, lineno)
         if op is None:
             return target
-        print(
-            f"INFO: Casting {binaryen.type.to_str(target.get_type())} to {binaryen.type.to_str(convert_to)} on line {lineno}"
-        )
+        # print(
+        #     f"INFO: Casting {binaryen.type.to_str(target.get_type())} to {binaryen.type.to_str(convert_to)} on line {lineno}"
+        # )
         return self.module.unary(op, target)
 
     def _set_var(

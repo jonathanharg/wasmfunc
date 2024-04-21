@@ -5,7 +5,7 @@ from .compiler import Compiler
 from .pre_compiler import PreCompiler
 
 
-def compile_file(input_path: str):
+def compile_file(input_path: str, wasmgc=False):
     with open(input_path, "r", encoding="utf-8") as file:
         code = file.read()
         path = os.path.split(input_path)
@@ -14,7 +14,7 @@ def compile_file(input_path: str):
         pre_compiler = PreCompiler()
         pre_compiler.visit(tree)
         compiler = Compiler(
-            filename, pre_compiler.argument_types, pre_compiler.return_type
+            filename, pre_compiler.argument_types, pre_compiler.return_type, enable_gc=wasmgc
         )
         compiler.visit(tree)
         return compiler
