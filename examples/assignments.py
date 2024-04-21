@@ -2,7 +2,7 @@
 
 # glob = "HI"
 
-# @py2wasm.func
+# @py2wasm.wasmfunc
 # def test(y: py2wasm.i32) -> py2wasm.i32:
 #     x: py2wasm.i32 = 10
 #     asdf = [1,2,3,4]

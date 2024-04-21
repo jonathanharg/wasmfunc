@@ -1,6 +1,6 @@
-from py2wasm import func, i32
+from py2wasm import wasmfunc, i32
 
-# @py2wasm.func
+# @py2wasm.wasmfunc
 # def fib(n):
 #     """Print the Fibonacci series up to n."""
 #     a, b = 0, 1
@@ -11,14 +11,14 @@ from py2wasm import func, i32
 #     print()
 
 
-# # @py2wasm.func
+# # @py2wasm.wasmfunc
 # def hello():
 #     message: str
 #     message = "Hello world"
 #     print(message)
 
 
-@func
+@wasmfunc
 def basic() -> i32:
     a: i32 = 2
     b: i32 = 1

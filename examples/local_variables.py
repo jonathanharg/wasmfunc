@@ -1,7 +1,7 @@
 import py2wasm
 
 
-@py2wasm.func
+@py2wasm.wasmfunc
 def assignment() -> py2wasm.i32:
     x: py2wasm.i32 = 10
     y: py2wasm.i32 = 15

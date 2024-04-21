@@ -1,7 +1,7 @@
-from py2wasm import func, i32
+from py2wasm import wasmfunc, i32
 
 
-@func
+@wasmfunc
 def while_loop() -> i32:
     i: i32 = 1
     j: i32 = 0
@@ -24,7 +24,7 @@ def while_loop() -> i32:
 testinputs_while_loop = [()]
 
 
-@func
+@wasmfunc
 def double_while() -> i32:
     i: i32 = 0
     j: i32 = 0
@@ -38,7 +38,7 @@ def double_while() -> i32:
 testinputs_double_while = [()]
 
 
-@func
+@wasmfunc
 def if_else(x: i32) -> i32:
     a: i32 = 0
     if x > 0:

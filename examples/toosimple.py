@@ -1,10 +1,10 @@
-from py2wasm import f64, func
+from py2wasm import f64, wasmfunc
 
 # TODO:
 # Error if no type in func variable
 
 
-@func
+@wasmfunc
 def toosimple(n: f64) -> f64:
     sum: f64 = 0.0
     flip: f64 = -1.0

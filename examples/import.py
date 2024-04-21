@@ -1,16 +1,16 @@
 import py2wasm as p
 
 # fmt: off
-from py2wasm import func, i32 as l # isort: skip
+from py2wasm import wasmfunc, i32 as l # isort: skip
 # fmt: on
 
 
-@p.func
+@p.wasmfunc
 def add(x: p.i32, y: l) -> p.i32:
     return x + y
 
 
-@func
+@wasmfunc
 def addTen(x: p.i32) -> p.i32:
     return x + 10
 

@@ -70,16 +70,16 @@ class PreCompiler(NodeVisitor):
         super().__init__()
 
     def visit_FunctionDef(self, node: FunctionDef):
-        """Check if function has the binaryen decorator @binaryen.func"""
+        """Check if function has the binaryen decorator @binaryen.wasmfunc"""
         contains_wasm = False
         for decorator in node.decorator_list:
             match decorator:
                 case Attribute(
-                    value=Name(), attr="func"
+                    value=Name(), attr="wasmfunc"
                 ) if decorator.value.id in self.module_aliases:
                     contains_wasm = True
                     break
-                case Name() if self.object_aliases[decorator.id] == "func":
+                case Name() if self.object_aliases[decorator.id] == "wasmfunc":
                     contains_wasm = True
                     break
 

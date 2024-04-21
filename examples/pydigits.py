@@ -1,4 +1,18 @@
-def extract_Digit(nth):
+# Get the nth number of Pi indexed starting at 1
+# 3.13159
+# 1 23456
+from sys import argv
+from py2wasm import i64, wasmfunc
+
+tmp1: i64 = 0
+tmp2: i64 = 0
+acc: i64 = 0
+den: i64 = 1
+num: i64 = 1
+
+
+@wasmfunc
+def extract_Digit(nth: i64) -> i64:
     global tmp1, tmp2, acc, den, num
     tmp1 = num * nth
     tmp2 = tmp1 + acc
@@ -7,14 +21,16 @@ def extract_Digit(nth):
     return tmp1
 
 
-def eliminate_Digit(d):
+@wasmfunc
+def eliminate_Digit(d: i64):
     global acc, den, num
     acc = acc - den * d
     acc = acc * 10
     num = num * 10
 
 
-def next_Term(k):
+@wasmfunc
+def next_Term(k: i64):
     global acc, den, num
     k2 = k * 2 + 1
     acc = acc + num * 2
@@ -23,7 +39,8 @@ def next_Term(k):
     num = num * k
 
 
-def main(n):
+@wasmfunc
+def pidigit_main(n: i64) -> i64:
     global tmp1, tmp2, acc, den, num
 
     tmp1 = 0
@@ -33,8 +50,8 @@ def main(n):
     den = 1
     num = 1
 
-    i = 0
-    k = 0
+    i: i64 = 0
+    k: i64 = 0
     while i < n:
         k += 1
         next_Term(k)
@@ -42,16 +59,16 @@ def main(n):
         if num > acc:
             continue
 
-        d = extract_Digit(3)
-        if d != extract_Digit(4):
+        three: i64 = 3
+        four: i64 = 4
+        d = extract_Digit(three)
+        if d != extract_Digit(four):
             continue
 
-        print(chr(48 + d), end="")
         i += 1
-        if i % 10 == 0:
-            print("\t:%d" % (i))
         eliminate_Digit(d)
+    return d
 
 
 if __name__ == "__main__":
-    main(30000)
+    print(pidigit_main(int(argv[1])))

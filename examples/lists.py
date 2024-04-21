@@ -1,19 +1,19 @@
-from py2wasm import func, i32
+from py2wasm import wasmfunc, i32
 
-# @func
+# @wasmfunc
 # def create() -> i32:
 #     arr = [5, 4, 3, 2, 1]
 #     return arr[1]
 
 
-# @func
+# @wasmfunc
 # def edit() -> i32:
 #     arr = [5, 4, 3, 2, 1]
 #     arr[1] = 0
 #     return arr[1]
 
 
-# @func
+# @wasmfunc
 # def remove() -> i32:
 #     arr = [5, 4, 3, 2, 1]
 #     del arr[0]

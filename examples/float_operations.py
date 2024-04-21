@@ -1,7 +1,7 @@
-from py2wasm import f32, func
+from py2wasm import f32, wasmfunc
 
 
-@func
+@wasmfunc
 def addition() -> f32:
     x: f32 = 2.0
     y: f32 = 3.0
@@ -15,14 +15,14 @@ def addition() -> f32:
 #     return x + y
 
 
-@func
+@wasmfunc
 def subtraction() -> f32:
     x: f32 = 5.0
     y: f32 = 3.0
     return x - y
 
 
-@func
+@wasmfunc
 def multiplication() -> f32:
     x: f32 = 5.0
     y: f32 = 3.0

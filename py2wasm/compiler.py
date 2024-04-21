@@ -288,16 +288,16 @@ class Compiler(NodeTransformer):
     # visit_FunctionType
 
     def visit_FunctionDef(self, node: FunctionDef):
-        """Check if function has the binaryen decorator @binaryen.func"""
+        """Check if function has the binaryen decorator @binaryen.wasmfunc"""
         contains_wasm = False
         for decorator in node.decorator_list:
             match decorator:
                 case Attribute(
-                    value=Name(), attr="func"
+                    value=Name(), attr="wasmfunc"
                 ) if decorator.value.id in self.module_aliases:
                     contains_wasm = True
                     break
-                case Name() if self.object_aliases[decorator.id] == "func":
+                case Name() if self.object_aliases[decorator.id] == "wasmfunc":
                     contains_wasm = True
                     break
 
@@ -982,7 +982,7 @@ class Compiler(NodeTransformer):
 
         assert self.current_wasm_function is not None
 
-        argument_types = self.function_arguments[self.current_wasm_function]
+        argument_types = self.function_arguments[node.func.id]
 
         args = []
         for i, argument in enumerate(node.args):
@@ -991,7 +991,7 @@ class Compiler(NodeTransformer):
             cast_arg_exp = self._cast_numeric_to_type(arg_exp, arg_type, node.lineno)
             args.append(cast_arg_exp)
 
-        return_type = self.function_returns[self.current_wasm_function]
+        return_type = self.function_returns[node.func.id]
 
         return self.module.call(name, args, return_type)
 

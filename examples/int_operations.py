@@ -1,32 +1,32 @@
-from py2wasm import func, i32
+from py2wasm import wasmfunc, i32
 
 
-@func
+@wasmfunc
 def addition() -> i32:
     return 2 + 3
 
 
-@func
+@wasmfunc
 def subtraction() -> i32:
     return 5 - 3
 
 
-@func
+@wasmfunc
 def multiplication() -> i32:
     return 5 * 3
 
 
-@func
+@wasmfunc
 def division() -> i32:
     return 6 // 2  # Integer division
 
 
-@func
+@wasmfunc
 def remainder() -> i32:
     return 7 % 3  # Modulus
 
 
-# @func
+# @wasmfunc
 # def exponentiation() -> i32:
 #     return 2 ** 3
 
