@@ -20,8 +20,8 @@ from py2wasm import func, i32
 
 @func
 def basic() -> i32:
-    a: i32
-    b: i32
+    a: i32 = 2
+    b: i32 = 1
     a = 1
     b = 2
     return a + b

@@ -1,8 +1,8 @@
 import ast
 import os
-import symtable
 
 from .compiler import Compiler
+from .pre_compiler import PreCompiler
 
 
 def compile_file(input_path: str):
@@ -11,8 +11,11 @@ def compile_file(input_path: str):
         path = os.path.split(input_path)
         filename = path[-1]
         tree = ast.parse(code, filename=filename, type_comments=True)
-        symbol_table = symtable.symtable(code, filename, "exec")
-        compiler = Compiler(symbol_table)
+        pre_compiler = PreCompiler()
+        pre_compiler.visit(tree)
+        compiler = Compiler(
+            filename, pre_compiler.argument_types, pre_compiler.return_type
+        )
         compiler.visit(tree)
         return compiler
 

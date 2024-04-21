@@ -40,7 +40,7 @@ testinputs_double_while = [()]
 
 @func
 def if_else(x: i32) -> i32:
-    a: i32
+    a: i32 = 0
     if x > 0:
         a = 1
     else:

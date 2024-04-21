@@ -1,4 +1,4 @@
-from py2wasm import func, f64
+from py2wasm import f64, func
 
 # TODO:
 # Error if no type in func variable
