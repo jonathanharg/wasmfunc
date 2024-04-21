@@ -1005,12 +1005,10 @@ class Compiler(NodeTransformer):
             # TODO: Don't ascii encode
             return self.module.string_const(node.value.encode("ascii"))
         if isinstance(node.value, int):
-            # TODO: Should probably bounds check this!!!
-            # TODO: This should be explicit! Explicitly decide on int32 signed/unsigned
-            value = binaryen.literal.int32(node.value)
+            value = binaryen.literal.int64(node.value)
             return self.module.const(value)
         if isinstance(node.value, float):
-            value = binaryen.literal.float32(node.value)
+            value = binaryen.literal.float64(node.value)
             return self.module.const(value)
         # From the docs:
         # The values represented can be simple types such as a number, string or None, but also immutable container types (tuples and frozensets) if all of their elements are constant.

@@ -4,8 +4,7 @@ num: i32 = 6
 
 
 @wasmfunc
-def get_global() -> i32:
-    # TODO RETURN NONE
+def get_global() ->i32:
     global num
     return num
 
@@ -13,5 +12,8 @@ def get_global() -> i32:
 @wasmfunc
 def set_global(x: i32) -> i32:
     global num
-    num = x
+    num += x
     return num
+
+testinput_get_global = [()]
+testinput_set_global = [(0,)]

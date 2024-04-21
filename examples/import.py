@@ -1,7 +1,7 @@
 import wasmfunc as p
 
 # fmt: off
-from wasmfunc import wasmfunc, i32 as l # isort: skip
+from wasmfunc import wasmfunc as f, i32 as l  # isort: skip
 # fmt: on
 
 
@@ -10,7 +10,7 @@ def add(x: p.i32, y: l) -> p.i32:
     return x + y
 
 
-@wasmfunc
+@f
 def addTen(x: p.i32) -> p.i32:
     return x + 10
 

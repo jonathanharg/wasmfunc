@@ -1,4 +1,4 @@
-from wasmfunc import f32, wasmfunc
+from wasmfunc import f32, f64, wasmfunc
 
 
 @wasmfunc
@@ -8,11 +8,11 @@ def addition() -> f32:
     return x + y
 
 
-# @func
-# def addition_rounding() -> f64:
-#     x: f64 = 0.1
-#     y: f64 = 0.2
-#     return x + y
+@wasmfunc
+def addition_rounding() -> f64:
+    x: f64 = 0.1
+    y: f64 = 0.2
+    return x + y
 
 
 @wasmfunc
@@ -29,11 +29,11 @@ def multiplication() -> f32:
     return x * y
 
 
-# @func
-# def division() -> f32:
-#     return 6 // 2  # Integer division
+@wasmfunc
+def division() -> f32:
+    return 6 // 2  # Integer division
 
-# @func
+# @wasmfunc
 # def remainder() -> f32:
 #     x: f32 = 7.0
 #     y: f32 = 3.0
@@ -43,7 +43,6 @@ def multiplication() -> f32:
 # def exponentiation() -> i32:
 #     return 2 ** 3
 
-# TODO: Remove the need for these for tests
 testinputs_addition = [()]
 testinputs_addition_rounding = [()]
 testinputs_subtraction = [()]

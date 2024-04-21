@@ -16,5 +16,4 @@ def toosimple(n: f64) -> f64:
     return sum * 4.0
 
 
-if __name__ == "__main__":
-    print(toosimple(100_000_000))
+testinput_toosimple = [(1000,)]
