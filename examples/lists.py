@@ -1,4 +1,4 @@
-from wasmfunc import wasmfunc, i32
+from wasmfunc import i32, wasmfunc
 
 # @wasmfunc
 # def create() -> i32:

@@ -76,38 +76,39 @@ class Compiler(NodeTransformer):
         filename: str,
         function_arguments: dict[str, BinaryenType],
         function_return: dict[str, BinaryenType],
+        enable_gc=False,
     ) -> None:
         self.filename = filename
         self.module = binaryen.Module()
         self.module_aliases = []
         self.object_aliases = {}
 
-        # self.current_function_return: BinaryenType | None = None
-        self.current_wasm_function: str | None = None
+        self.func_ref: binaryen.FunctionRef | None = None
         self.function_arguments = function_arguments
         self.function_returns = function_return
 
         self.variable_types: dict[str, BinaryenType] = {}
         self.variable_indexes: dict[str, int] = {}
-        self.variable_count = 0
 
         self.all_globals: dict[str, tuple[BinaryenType, AST]] = {}
         self.scoped_globals: dict[str, BinaryenType] = {}
 
         self.while_stack = [0]
 
-        # TODO: Make this a user option
-        self.module.set_feature(binaryen.Feature.GC | binaryen.Feature.ReferenceTypes)
+        if enable_gc:
+            self.module.set_feature(
+                binaryen.Feature.GC | binaryen.Feature.ReferenceTypes
+            )
 
         super().__init__()
 
     def _create_local(self, name: str, var_type: BinaryenType) -> int:
         if name in self.variable_types:
             raise RuntimeError("A local already exists with this name.")
-        index = self.variable_count
-        self.variable_count += 1
+        index = self.func_ref.add_var(var_type)
         self.variable_types[name] = var_type
         self.variable_indexes[name] = index
+        self.func_ref.set_local_name(index, name.encode("ascii"))
         return index
 
     def _cast_numeric_to_matching(
@@ -155,15 +156,12 @@ class Compiler(NodeTransformer):
         lineno: int,
     ):
         from_type = target.get_type()
-        # TODO: Support S and U ints
-        # ATM Assume everything is S
         match from_type:
             case binaryen.type.Int32:
                 match convert_to:
                     case binaryen.type.Int32:
                         return None
                     case binaryen.type.Int64:
-                        # return binaryen.operations.ExtendS32Int64()
                         return binaryen.operations.ExtendSInt32()
                     case binaryen.type.Float32:
                         return binaryen.operations.ConvertSInt32ToFloat32()
@@ -234,7 +232,7 @@ class Compiler(NodeTransformer):
         )
         return self.module.unary(op, target)
 
-    def _set_variable(
+    def _set_var(
         self,
         name: str,
         value: binaryen.Expression,
@@ -278,9 +276,6 @@ class Compiler(NodeTransformer):
         local_id = self._create_local(name, type_annotation)
         return self.module.local_set(local_id, value)
 
-    def _get_variable():
-        pass
-
     def visit_Module(self, node: Module):
         super().generic_visit(node)
 
@@ -304,12 +299,9 @@ class Compiler(NodeTransformer):
         if not contains_wasm:
             return
 
-        if self.current_wasm_function is not None:
+        if self.func_ref is not None:
             # We are already in a WASM function, inner functions are not supported
-            # TODO: support inner functions
             raise NotImplementedError
-
-        self.current_wasm_function = node.name
 
         name = bytes(node.name, "ascii")
 
@@ -318,13 +310,15 @@ class Compiler(NodeTransformer):
         if any(default for default in node.args.defaults):
             raise RuntimeError("Defaults not supported")
 
-        for argument in node.args.args:
+        for i, argument in enumerate(node.args.args):
             argument_type = get_binaryen_type(argument.annotation, self.object_aliases)
             if argument_type is None:
                 raise RuntimeError(
                     f'Types must be provided for all function arguments. "{self.filename}", line {node.lineno}.'
                 )
-            self._create_local(argument.arg, argument_type)
+
+            self.variable_types[argument.arg] = argument_type
+            self.variable_indexes[argument.arg] = i
 
         return_type = get_binaryen_type(node.returns, self.object_aliases)
 
@@ -332,6 +326,20 @@ class Compiler(NodeTransformer):
             return_type = binaryen.type.TypeNone
 
         body = self.module.block(None, [], return_type)
+
+        # # Dicts preserve insertion order, no locals have been added yet
+        function_parameter_types = list(self.variable_types.values())
+
+        self.func_ref = self.module.add_function(
+            name,
+            binaryen.type.create(function_parameter_types),
+            return_type,
+            [],
+            body,
+        )
+
+        for i, argument in enumerate(node.args.args):
+            self.func_ref.set_local_name(i, argument.arg.encode("ascii"))
 
         for body_node in node.body:
             if isinstance(body_node, AST):
@@ -341,20 +349,6 @@ class Compiler(NodeTransformer):
                 elif expression is not None:
                     print("Error: Non binaryen output of node!")
 
-        # Dicts preserve insertion order
-        all_variable_types = list(self.variable_types.values())
-        param_num = len(node.args.args)
-        # First n variables are parameters, remained are locals
-        function_parameter_types = all_variable_types[:param_num]
-        local_variable_types = all_variable_types[param_num:]
-
-        self.module.add_function(
-            name,
-            binaryen.type.create(function_parameter_types),
-            return_type,
-            local_variable_types,
-            body,
-        )
         self.module.auto_drop()
         self.module.add_function_export(name, name)
 
@@ -362,8 +356,7 @@ class Compiler(NodeTransformer):
             self.module.print()
             raise RuntimeError("Wasm module is not valid!")
 
-        self.current_wasm_function = None
-        self.variable_count = 0
+        self.func_ref = None
         self.variable_indexes = {}
         self.variable_types = {}
         self.scoped_globals = {}
@@ -372,12 +365,15 @@ class Compiler(NodeTransformer):
     # visit_ClassDef
 
     def visit_Return(self, node: Return):
-        if self.current_wasm_function is None:
+        if self.func_ref is None:
             raise NotImplementedError
 
         value = super().visit(node.value) if node.value is not None else None
 
-        return_type = self.function_returns[self.current_wasm_function]
+        current_func_name = binaryen.ffi.string(self.func_ref.get_name()).decode(
+            "utf-8"
+        )
+        return_type = self.function_returns[current_func_name]
 
         casted_value = self._cast_numeric_to_type(value, return_type, node.lineno)
         return self.module.Return(casted_value)
@@ -385,7 +381,7 @@ class Compiler(NodeTransformer):
     # visit_Delete
 
     def visit_Assign(self, node: Assign):
-        if self.current_wasm_function is None:
+        if self.func_ref is None:
             if isinstance(node.value, Name) and node.value.id in self.all_globals:
                 raise RuntimeError(
                     f'Cannot modify the value of a WebAssembly global outside of a WebAssembly function. "{self.filename}", line {node.lineno}.'
@@ -407,7 +403,7 @@ class Compiler(NodeTransformer):
                     f'Variable unpacking, subscripts and annotations are not supported. "{self.filename}", line {node.lineno}.'
                 )
             name = target.id
-            expressions.append(self._set_variable(name, value, target.lineno))
+            expressions.append(self._set_var(name, value, target.lineno))
 
         if len(expressions) > 1:
             return self.module.block(None, expressions, binaryen.type.TypeNone)
@@ -429,7 +425,7 @@ class Compiler(NodeTransformer):
         return self.visit_Assign(hijacked_node)
 
     def visit_AnnAssign(self, node: AnnAssign):
-        if self.current_wasm_function is None:
+        if self.func_ref is None:
             # Variable may be a global, so we should track it.
 
             type_annotation = get_binaryen_type(node.annotation, self.object_aliases)
@@ -488,7 +484,7 @@ class Compiler(NodeTransformer):
 
         value = self.visit(node.value)
 
-        return self._set_variable(
+        return self._set_var(
             node.target.id, value, node.lineno, type_annotation=type_annotation
         )
 
@@ -496,7 +492,7 @@ class Compiler(NodeTransformer):
     # visit_AsyncFor
 
     def visit_While(self, node: While):
-        if self.current_wasm_function is None:
+        if self.func_ref is None:
             raise NotImplementedError
 
         loop_condition = super().visit(node.test)
@@ -540,7 +536,7 @@ class Compiler(NodeTransformer):
         return loop
 
     def visit_If(self, node: If):
-        if self.current_wasm_function is None:
+        if self.func_ref is None:
             # raise NotImplementedError
             return
 
@@ -569,7 +565,6 @@ class Compiler(NodeTransformer):
     def visit_Assert(self, node: Assert):
         if node.msg is not None:
             raise RuntimeError("Assertion messages are not supported")
-        # TODO: We should write an error message to stderr
 
         condition = super().visit(node.test)
         check = self.module.If(condition, self.module.nop(), self.module.unreachable())
@@ -672,7 +667,7 @@ class Compiler(NodeTransformer):
     # visit_NamedExpr
 
     def visit_BinOp(self, node: BinOp):
-        if self.current_wasm_function is None:
+        if self.func_ref is None:
             raise NotImplementedError
 
         left = super().visit(node.left)
@@ -756,7 +751,6 @@ class Compiler(NodeTransformer):
                         raise RuntimeError("Can't multiply non numeric wasm types")
             case Mod():
                 match op_type:
-                    # TODO: Assuming signed
                     case binaryen.type.Int32:
                         mod_op = binaryen.operations.RemSInt32()
                     case binaryen.type.Int64:
@@ -767,9 +761,7 @@ class Compiler(NodeTransformer):
             case FloorDiv():
                 # NOTE: Python has strange floor division because of PEP 238
                 # In python: a // b == floor(a/b)
-                # TODO: Fix this so it matches python?
                 match op_type:
-                    # TODO: Assuming signed
                     case binaryen.type.Int32:
                         left_float = self._cast_numeric_to_type(
                             left, binaryen.type.Float32, node.lineno
@@ -866,14 +858,14 @@ class Compiler(NodeTransformer):
     # visit_YieldFrom
 
     def visit_Compare(self, node: Compare):
+        if self.func_ref is None:
+            raise NotImplementedError
+
         if len(node.comparators) > 1 or len(node.ops) > 1:
             # TODO: Supported chained comparisons
             raise NotImplementedError(
                 "Error: Chained comparisons e.g. 1 <= a < 10 are not currently supported. Please use brackets."
             )
-
-        if self.current_wasm_function is None:
-            raise NotImplementedError
 
         left = super().visit(node.left)
         right = super().visit(node.comparators[0])
@@ -882,7 +874,6 @@ class Compiler(NodeTransformer):
         )
         op_type = cast_left.get_type()
 
-        # TODO: Don't assume signed
         match node.ops[0]:
             case Eq():
                 match op_type:
@@ -974,13 +965,13 @@ class Compiler(NodeTransformer):
         return self.module.binary(op, cast_left, cast_right)
 
     def visit_Call(self, node: Call):
+        assert self.func_ref is not None
+
         if len(node.keywords) > 0:
             raise NotImplementedError("wasmfunc does not support keyword arguments!")
 
         assert isinstance(node.func, Name)
         name = bytes(node.func.id, "ascii")
-
-        assert self.current_wasm_function is not None
 
         argument_types = self.function_arguments[node.func.id]
 
@@ -1049,7 +1040,6 @@ class Compiler(NodeTransformer):
         # Name could be
         # LocalSet, GlobalSet, Store?, StructSet, ArraySet
 
-        # TODO: Assuming local variable
         if isinstance(node.ctx, Load):
             if node.id in self.variable_types:
                 index = self.variable_indexes[node.id]
@@ -1061,7 +1051,7 @@ class Compiler(NodeTransformer):
                 binaryen_type = self.scoped_globals[node.id]
                 return self.module.global_get(ascii_name, binaryen_type)
 
-            raise RuntimeError("Trying to load an undeclared variable")
+            raise RuntimeError(f"Trying to load an undeclared variable {node.id}")
         if isinstance(node.ctx, Store):
             raise RuntimeError("This code should never be reached")
         if isinstance(node.ctx, Del):

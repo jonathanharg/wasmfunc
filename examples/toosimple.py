@@ -1,8 +1,5 @@
 from wasmfunc import f64, wasmfunc
 
-# TODO:
-# Error if no type in func variable
-
 
 @wasmfunc
 def toosimple(n: f64) -> f64:

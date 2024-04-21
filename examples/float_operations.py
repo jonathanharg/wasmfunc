@@ -33,6 +33,7 @@ def multiplication() -> f32:
 def division() -> f32:
     return 6 // 2  # Integer division
 
+
 # @wasmfunc
 # def remainder() -> f32:
 #     x: f32 = 7.0
