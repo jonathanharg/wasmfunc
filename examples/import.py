@@ -1,7 +1,7 @@
-import py2wasm as p
+import wasmfunc as p
 
 # fmt: off
-from py2wasm import wasmfunc, i32 as l # isort: skip
+from wasmfunc import wasmfunc, i32 as l # isort: skip
 # fmt: on
 
 

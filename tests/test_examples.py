@@ -6,10 +6,10 @@ from glob import glob
 
 from wasmtime import Instance, Module, Store
 
-from py2wasm.file_handler import compile_file
+from wasmfunc.file_handler import compile_file
 
 
-def test_py2wasm_file(path: str):
+def test_wasmfunc_file(path: str):
     # print(path)
     # assert 0 == 1
     # return
@@ -38,7 +38,7 @@ def test_py2wasm_file(path: str):
     #     set(file_contents)
     #     - set(testing_functions)
     #     - set(map(lambda x: "testinputs_" + x, testing_functions))
-    #     - set(["py2wasm"])
+    #     - set(["wasmfunc"])
     # )
     # assert len(untested_functions) == 0
 

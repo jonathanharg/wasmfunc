@@ -11,11 +11,11 @@ Float64 = binaryen.type.Float64
 
 
 def get_binaryen_type(node: expr | None, object_aliases: dict[str, str]):
-    """Convert a py2wasm annotation e.g. x:py2wasm.i32 to a binaryen type object e.g: binaryen.type.Int32()"""
-    # Annotations are either Attribute(Name) e.g. py2wasm.i32
-    # Or are Name e.g. by using `from py2wasm import i32`
-    # Note that both the Attribute and Name can be aliased because of `import py2wasm as p`
-    # Or `from py2wasm import i32 as integer32`
+    """Convert a wasmfunc annotation e.g. x:wasmfunc.i32 to a binaryen type object e.g: binaryen.type.Int32()"""
+    # Annotations are either Attribute(Name) e.g. wasmfunc.i32
+    # Or are Name e.g. by using `from wasmfunc import i32`
+    # Note that both the Attribute and Name can be aliased because of `import wasmfunc as p`
+    # Or `from wasmfunc import i32 as integer32`
 
     if node is None:
         return None
@@ -34,19 +34,19 @@ def get_binaryen_type(node: expr | None, object_aliases: dict[str, str]):
 
 
 def handle_Import(node: Import, module_aliases: list[str]):
-    # Record if py2wasm is imported, or if its imported under an alias
+    # Record if wasmfunc is imported, or if its imported under an alias
     for module in node.names:
-        if module.name == "py2wasm":
+        if module.name == "wasmfunc":
             if module.asname is not None:
                 module_aliases.append(module.asname)
             else:
-                module_aliases.append("py2wasm")
+                module_aliases.append("wasmfunc")
     return
 
 
 def handle_ImportFrom(node: ImportFrom, object_aliases: dict[str, str]):
-    # Record if the py2wasm decorator is imported, or if its imported under an alias
-    if node.module != "py2wasm":
+    # Record if the wasmfunc decorator is imported, or if its imported under an alias
+    if node.module != "wasmfunc":
         return
     for function in node.names:
         if function.asname is not None:

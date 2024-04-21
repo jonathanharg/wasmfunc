@@ -2,7 +2,7 @@
 # 3.13159
 # 1 23456
 from sys import argv
-from py2wasm import i64, wasmfunc
+from wasmfunc import i64, wasmfunc
 
 tmp1: i64 = 0
 tmp2: i64 = 0

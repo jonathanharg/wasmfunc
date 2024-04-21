@@ -1,10 +1,10 @@
-# import py2wasm
+# import wasmfunc
 
 # glob = "HI"
 
-# @py2wasm.wasmfunc
-# def test(y: py2wasm.i32) -> py2wasm.i32:
-#     x: py2wasm.i32 = 10
+# @wasmfunc.wasmfunc
+# def test(y: wasmfunc.i32) -> wasmfunc.i32:
+#     x: wasmfunc.i32 = 10
 #     asdf = [1,2,3,4]
 
 #     def inner():

@@ -5,10 +5,10 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python: Test Py2Wasm",
+            "name": "Python: Test wasmfunc",
             "type": "python",
             "request": "launch",
-            "module": "py2wasm",
+            "module": "wasmfunc",
             "justMyCode": true,
             "args": ["${file}"]
         },
@@ -22,10 +22,10 @@
             "args": ["examples/add.py"]
         },
         {
-            "name": "Compile File with Py2Wasm",
+            "name": "Compile File with wasmfunc",
             "type": "debugpy",
             "request": "launch",
-            "module": "py2wasm",
+            "module": "wasmfunc",
             "console": "integratedTerminal",
             "justMyCode": true,
             "args": ["${file}"]

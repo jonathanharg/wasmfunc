@@ -1,4 +1,4 @@
-from py2wasm import f32, wasmfunc
+from wasmfunc import f32, wasmfunc
 
 
 @wasmfunc

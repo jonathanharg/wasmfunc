@@ -1,11 +1,11 @@
-# Py2Wasm
+# wasmfunc
 
-Py2Wasm is a Python to WebAssembly Compiler built for converting a typed subset of python  code to a compiled Wasm binary.
+wasmfunc is a Python to WebAssembly Compiler built for converting a typed subset of python  code to a compiled Wasm binary.
 
 ## Installation
 
 ```bash
-pip install py2wasm
+pip install wasmfunc
 ```
 
 ## How to use
@@ -25,8 +25,8 @@ def fib_recursive(n: i32) -> i32:
 Then compile with
 
 ```bash
-py2wasm fib.py
-# Or python -m py2wasm fib.py
+wasmfunc fib.py
+# Or python -m wasmfunc fib.py
 ```
 
 For more examples see [examples](examples/).

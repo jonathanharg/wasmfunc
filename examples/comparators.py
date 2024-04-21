@@ -1,1 +1,1 @@
-import py2wasm
+import wasmfunc

@@ -1,10 +1,10 @@
-import py2wasm
+import wasmfunc
 
 
-@py2wasm.wasmfunc
-def assignment() -> py2wasm.i32:
-    x: py2wasm.i32 = 10
-    y: py2wasm.i32 = 15
+@wasmfunc.wasmfunc
+def assignment() -> wasmfunc.i32:
+    x: wasmfunc.i32 = 10
+    y: wasmfunc.i32 = 15
     z = x + y
     t = x - y
     w = z * t

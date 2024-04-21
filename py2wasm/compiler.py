@@ -975,7 +975,7 @@ class Compiler(NodeTransformer):
 
     def visit_Call(self, node: Call):
         if len(node.keywords) > 0:
-            raise NotImplementedError("py2wasm does not support keyword arguments!")
+            raise NotImplementedError("wasmfunc does not support keyword arguments!")
 
         assert isinstance(node.func, Name)
         name = bytes(node.func.id, "ascii")
@@ -1086,5 +1086,5 @@ class Compiler(NodeTransformer):
 
     def generic_visit(self, node):
         raise RuntimeError(
-            f"Node of type {node.__class__.__name__} is not supported by py2wasm. Line number {node.lineno if hasattr(node, 'lineno') else '?'}"
+            f"Node of type {node.__class__.__name__} is not supported by wasmfunc. Line number {node.lineno if hasattr(node, 'lineno') else '?'}"
         )
