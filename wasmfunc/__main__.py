@@ -2,11 +2,27 @@ import sys
 import argparse
 from .file_handler import compile_file, generate_output_name
 
-parser = argparse.ArgumentParser(description='A WebAssembly compiler for Python')
+parser = argparse.ArgumentParser(description="A WebAssembly compiler for Python")
 
-parser.add_argument('files', metavar='FILE', type=str, nargs='+', help='Files to compile')
-parser.add_argument('-no', '--no-optimizations', action='store_false', dest='optimize', default=True, help='Disable optimizations')
-parser.add_argument('-gc', '--enable-wasmgc', action='store_true', dest='wasmgc', default=False, help='Enable garbage collection')
+parser.add_argument(
+    "files", metavar="FILE", type=str, nargs="+", help="Files to compile"
+)
+parser.add_argument(
+    "-no",
+    "--no-optimizations",
+    action="store_false",
+    dest="optimize",
+    default=True,
+    help="Disable optimizations",
+)
+parser.add_argument(
+    "-gc",
+    "--enable-wasmgc",
+    action="store_true",
+    dest="wasmgc",
+    default=False,
+    help="Enable garbage collection",
+)
 
 args = parser.parse_args()
 

@@ -13,4 +13,4 @@ def toosimple(n: f64) -> f64:
     return sum * 4.0
 
 
-testinput_toosimple = [(1000,)]
+testinputs_toosimple = [(1000.0,)]

@@ -14,7 +14,10 @@ def compile_file(input_path: str, wasmgc=False):
         pre_compiler = PreCompiler()
         pre_compiler.visit(tree)
         compiler = Compiler(
-            filename, pre_compiler.argument_types, pre_compiler.return_type, enable_gc=wasmgc
+            filename,
+            pre_compiler.argument_types,
+            pre_compiler.return_type,
+            enable_gc=wasmgc,
         )
         compiler.visit(tree)
         return compiler

@@ -228,7 +228,7 @@ class Compiler(NodeTransformer):
         convert_to: BinaryenType,
         lineno: int,
     ):
-        if not binaryen.type.heap_type.is_basic(convert_to): # type: ignore
+        if not binaryen.type.heap_type.is_basic(convert_to):  # type: ignore
             print("Warning cannot cast heap types")
             return target
 
@@ -280,7 +280,7 @@ class Compiler(NodeTransformer):
         # Must be a new local
         if type_annotation is None:
             type_annotation = value.get_type()
-        
+
         if not binaryen.type.heap_type.is_basic(type_annotation):
             type_annotation = binaryen.type.from_heap_type(type_annotation, True)
 
@@ -294,6 +294,10 @@ class Compiler(NodeTransformer):
                 child.parent = n
 
         super().generic_visit(node)
+
+    def visit(self, node):
+        # print(f"Visiting: {node}")
+        return super().visit(node)
 
     # visit_Expression
     # visit_FunctionType
@@ -359,7 +363,7 @@ class Compiler(NodeTransformer):
 
         for body_node in node.body:
             if isinstance(body_node, AST):
-                expression = super().visit(body_node)
+                expression = self.visit(body_node)
                 if isinstance(expression, binaryen.Expression):
                     body.append_child(expression)
                 elif expression is not None:
@@ -379,7 +383,7 @@ class Compiler(NodeTransformer):
         if self.func_ref is None:
             raise NotImplementedError
 
-        value = super().visit(node.value) if node.value is not None else None
+        value = self.visit(node.value) if node.value is not None else None
 
         current_func_name = binaryen.ffi.string(self.func_ref.get_name()).decode(
             "utf-8"
@@ -424,11 +428,17 @@ class Compiler(NodeTransformer):
                     array_index = self.variable_indexes[name]
 
                     array_heap_type = binaryen.type.get_heap_type(array_type)
-                    array_element_type = binaryen.type.array_type.get_element_type(array_heap_type)
-                    array_value = self._cast_numeric_to_type(value, array_element_type, node.lineno)
+                    array_element_type = binaryen.type.array_type.get_element_type(
+                        array_heap_type
+                    )
+                    array_value = self._cast_numeric_to_type(
+                        value, array_element_type, node.lineno
+                    )
 
                     array_expression = self.module.local_get(array_index, array_type)
-                    expressions.append(self.module.array_set(array_expression, index, array_value))
+                    expressions.append(
+                        self.module.array_set(array_expression, index, array_value)
+                    )
 
                 case _:
                     raise RuntimeError(
@@ -525,20 +535,20 @@ class Compiler(NodeTransformer):
         if self.func_ref is None:
             raise NotImplementedError
 
-        loop_condition = super().visit(node.test)
+        loop_condition = self.visit(node.test)
 
         self.while_stack.append(id(node))
 
         loop_body = []
         for python_exp in node.body:
-            wasm_exp = super().visit(python_exp)
+            wasm_exp = self.visit(python_exp)
             loop_body.append(wasm_exp)
 
         cur_id = self.while_stack.pop()
 
         else_body = []
         for python_exp in node.orelse:
-            wasm_exp = super().visit(python_exp)
+            wasm_exp = self.visit(python_exp)
             else_body.append(wasm_exp)
 
         else_block = (
@@ -570,17 +580,17 @@ class Compiler(NodeTransformer):
             # raise NotImplementedError
             return
 
-        condition = super().visit(node.test)
+        condition = self.visit(node.test)
 
         if_true = self.module.block(None, [], binaryen.type.Auto)
         if_false = self.module.block(None, [], binaryen.type.Auto)
 
         for python_exp in node.body:
-            wasm_exp = super().visit(python_exp)
+            wasm_exp = self.visit(python_exp)
             if_true.append_child(wasm_exp)
 
         for python_exp in node.orelse:
-            wasm_exp = super().visit(python_exp)
+            wasm_exp = self.visit(python_exp)
             if_false.append_child(wasm_exp)
 
         return self.module.If(condition, if_true, if_false)
@@ -596,7 +606,7 @@ class Compiler(NodeTransformer):
         if node.msg is not None:
             raise RuntimeError("Assertion messages are not supported")
 
-        condition = super().visit(node.test)
+        condition = self.visit(node.test)
         check = self.module.If(condition, self.module.nop(), self.module.unreachable())
         return check
 
@@ -670,7 +680,7 @@ class Compiler(NodeTransformer):
 
     # visit_Nonlocal
     def visit_Expr(self, node: Expr):
-        value = super().visit(node.value)
+        value = self.visit(node.value)
         assert isinstance(value, binaryen.Expression)
         if value.get_type() != binaryen.type.TypeNone:
             return self.module.drop(value)
@@ -700,8 +710,8 @@ class Compiler(NodeTransformer):
         if self.func_ref is None:
             raise NotImplementedError
 
-        left = super().visit(node.left)
-        right = super().visit(node.right)
+        left = self.visit(node.left)
+        right = self.visit(node.right)
         (cast_left, cast_right) = self._cast_numeric_to_matching(
             left, right, node.lineno
         )
@@ -842,7 +852,7 @@ class Compiler(NodeTransformer):
                 raise NotImplementedError
 
     def visit_UnaryOp(self, node: UnaryOp):
-        value = super().visit(node.operand)
+        value = self.visit(node.operand)
         op_type = value.get_type()
         match node.op:
             case UAdd():
@@ -897,8 +907,8 @@ class Compiler(NodeTransformer):
                 "Error: Chained comparisons e.g. 1 <= a < 10 are not currently supported. Please use brackets."
             )
 
-        left = super().visit(node.left)
-        right = super().visit(node.comparators[0])
+        left = self.visit(node.left)
+        right = self.visit(node.comparators[0])
         (cast_left, cast_right) = self._cast_numeric_to_matching(
             left, right, node.lineno
         )
@@ -1014,7 +1024,7 @@ class Compiler(NodeTransformer):
 
         args = []
         for i, argument in enumerate(node.args):
-            arg_exp = super().visit(argument)
+            arg_exp = self.visit(argument)
             arg_type = argument_types[i]
             cast_arg_exp = self._cast_numeric_to_type(arg_exp, arg_type, node.lineno)
             args.append(cast_arg_exp)
@@ -1054,7 +1064,7 @@ class Compiler(NodeTransformer):
 
         if not isinstance(index, binaryen.Expression):
             raise RuntimeError("Expected Binaryen Expression for index value")
-        
+
         index = self._cast_numeric_to_type(index, Int32, node.lineno)
 
         value_type = value.get_type()
@@ -1108,10 +1118,12 @@ class Compiler(NodeTransformer):
 
         elements = []
         for element in node.elts:
-            wasm_element = super().visit(element)
-            cast_element = self._cast_numeric_to_type(wasm_element, array_element_type, node.lineno)
+            wasm_element = self.visit(element)
+            cast_element = self._cast_numeric_to_type(
+                wasm_element, array_element_type, node.lineno
+            )
             elements.append(cast_element)
-            
+
         return self.module.array_new_fixed(array_type, elements)
 
     # visit_Tuple

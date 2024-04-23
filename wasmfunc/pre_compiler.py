@@ -1,5 +1,14 @@
 #!/usr/bin/env python
-from ast import Attribute, FunctionDef, Import, ImportFrom, Name, NodeVisitor, Subscript, expr
+from ast import (
+    Attribute,
+    FunctionDef,
+    Import,
+    ImportFrom,
+    Name,
+    NodeVisitor,
+    Subscript,
+    expr,
+)
 
 import binaryen
 
@@ -40,7 +49,6 @@ def get_binaryen_type(node: expr | None, object_aliases: dict[str, str]):
             return tb.build()[0]
         case _:
             raise RuntimeWarning(f"Unkown argument annotation {node} ({type(node)})")
-
 
 
 def handle_Import(node: Import, module_aliases: list[str]):

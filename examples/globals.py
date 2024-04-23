@@ -16,5 +16,5 @@ def set_global(x: i32) -> i32:
     return num
 
 
-testinput_get_global = [()]
-testinput_set_global = [(0,)]
+testinputs_get_global = [()]
+testinputs_set_global = [(1,), (2,), (0,)]

@@ -4,8 +4,10 @@ from typing import Protocol, Self, Union
 class wasmfuncBaseType(Protocol):
     pass
 
+
 class array(wasmfuncBaseType, Protocol):
     pass
+
 
 class i32(wasmfuncBaseType, Protocol):
     def __add__(self, __value: Union[Self, int], /) -> Self: ...
