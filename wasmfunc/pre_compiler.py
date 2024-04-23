@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-from ast import Attribute, FunctionDef, Import, ImportFrom, Name, NodeVisitor, expr
+from ast import Attribute, FunctionDef, Import, ImportFrom, Name, NodeVisitor, Subscript, expr
 
 import binaryen
 
@@ -16,21 +16,31 @@ def get_binaryen_type(node: expr | None, object_aliases: dict[str, str]):
     # Or are Name e.g. by using `from wasmfunc import i32`
     # Note that both the Attribute and Name can be aliased because of `import wasmfunc as p`
     # Or `from wasmfunc import i32 as integer32`
-
-    if node is None:
-        return None
-    if not isinstance(node, (Name, Attribute)):
-        raise RuntimeWarning(f"Unkown argument annotation {node} ({type(node)})")
-
     type_map = {"i32": Int32, "i64": Int64, "f32": Float32, "f64": Float64}
 
     match node:
+        case None:
+            return None
         case Name():
             type_name = object_aliases[node.id]
             assert isinstance(type_name, str)
             return type_map[type_name]
         case Attribute():
             return type_map[node.attr]
+        case Subscript(value=Name(id="array")):
+            element_type = get_binaryen_type(node.slice, object_aliases)
+
+            if element_type is None:
+                raise RuntimeError("Cannot have a list with element type None")
+
+            tb = binaryen.TypeBuilder(1)
+            # Use not packed for now, easier I think
+            tb.set_array_type(0, element_type, binaryen.type.NotPacked, True)
+
+            return tb.build()[0]
+        case _:
+            raise RuntimeWarning(f"Unkown argument annotation {node} ({type(node)})")
+
 
 
 def handle_Import(node: Import, module_aliases: list[str]):

@@ -50,6 +50,7 @@ from ast import (
     Pow,
     Return,
     RShift,
+    Slice,
     Store,
     Sub,
     Subscript,
@@ -58,9 +59,11 @@ from ast import (
     USub,
     While,
 )
+import ast
 
 import binaryen
 
+from . import mini_std
 from .pre_compiler import get_binaryen_type, handle_Import, handle_ImportFrom
 
 type BinaryenType = binaryen.internals.BinaryenType
@@ -225,6 +228,10 @@ class Compiler(NodeTransformer):
         convert_to: BinaryenType,
         lineno: int,
     ):
+        if not binaryen.type.heap_type.is_basic(convert_to): # type: ignore
+            print("Warning cannot cast heap types")
+            return target
+
         op = self._get_numeric_conversion_op(target, convert_to, lineno)
         if op is None:
             return target
@@ -273,11 +280,19 @@ class Compiler(NodeTransformer):
         # Must be a new local
         if type_annotation is None:
             type_annotation = value.get_type()
+        
+        if not binaryen.type.heap_type.is_basic(type_annotation):
+            type_annotation = binaryen.type.from_heap_type(type_annotation, True)
 
         local_id = self._create_local(name, type_annotation)
         return self.module.local_set(local_id, value)
 
     def visit_Module(self, node: Module):
+        # Add a parent attribute to all nodes
+        for n in ast.walk(node):
+            for child in ast.iter_child_nodes(n):
+                child.parent = n
+
         super().generic_visit(node)
 
     # visit_Expression
@@ -350,12 +365,7 @@ class Compiler(NodeTransformer):
                 elif expression is not None:
                     print("Error: Non binaryen output of node!")
 
-        self.module.auto_drop()
         self.module.add_function_export(name, name)
-
-        if not self.module.validate():
-            self.module.print()
-            raise RuntimeError("Wasm module is not valid!")
 
         self.func_ref = None
         self.variable_indexes = {}
@@ -399,12 +409,31 @@ class Compiler(NodeTransformer):
 
         expressions = []
         for target in node.targets:
-            if not isinstance(target, Name):
-                raise RuntimeError(
-                    f'Variable unpacking, subscripts and annotations are not supported. "{self.filename}", line {node.lineno}.'
-                )
-            name = target.id
-            expressions.append(self._set_var(name, value, target.lineno))
+            match target:
+                case Name():
+                    name = target.id
+                    expressions.append(self._set_var(name, value, target.lineno))
+                case Subscript(value=Name()):
+                    # Assume its a list
+                    name = target.value.id
+
+                    index = self.visit(target.slice)
+                    index = self._cast_numeric_to_type(index, Int32, node.lineno)
+
+                    array_type = self.variable_types[name]
+                    array_index = self.variable_indexes[name]
+
+                    array_heap_type = binaryen.type.get_heap_type(array_type)
+                    array_element_type = binaryen.type.array_type.get_element_type(array_heap_type)
+                    array_value = self._cast_numeric_to_type(value, array_element_type, node.lineno)
+
+                    array_expression = self.module.local_get(array_index, array_type)
+                    expressions.append(self.module.array_set(array_expression, index, array_value))
+
+                case _:
+                    raise RuntimeError(
+                        f'Variable unpacking, subscripts and annotations are not supported. "{self.filename}", line {node.lineno}.'
+                    )
 
         if len(expressions) > 1:
             return self.module.block(None, expressions, binaryen.type.TypeNone)
@@ -972,6 +1001,13 @@ class Compiler(NodeTransformer):
             raise NotImplementedError("wasmfunc does not support keyword arguments!")
 
         assert isinstance(node.func, Name)
+
+        if node.func.id not in self.function_arguments:
+            if hasattr(mini_std, node.func.id):
+                return getattr(mini_std, node.func.id)(self, node)
+            else:
+                raise RuntimeError(f"Function not found {node.func.id}")
+
         name = bytes(node.func.id, "ascii")
 
         argument_types = self.function_arguments[node.func.id]
@@ -1014,8 +1050,12 @@ class Compiler(NodeTransformer):
             raise RuntimeError("Expected Binaryen Expression for subscript value")
 
         index = self.visit(node.slice)
+        # TODO: MATCH ON SLICE
+
         if not isinstance(index, binaryen.Expression):
             raise RuntimeError("Expected Binaryen Expression for index value")
+        
+        index = self._cast_numeric_to_type(index, Int32, node.lineno)
 
         value_type = value.get_type()
         value_heap_type = binaryen.type.get_heap_type(value_type)
@@ -1030,6 +1070,8 @@ class Compiler(NodeTransformer):
                     f"Cannot load subscript on {value_type} ({value_heap_type})"
                 )
             case Store():
+                print(f"SUBSCRIPT PARENT IS {node.parent}")
+                print(f"REACHED LEGACY CODE")
                 return (value, index)
             case Del():
                 raise NotImplementedError("Cannot delete with subscript")
@@ -1059,16 +1101,18 @@ class Compiler(NodeTransformer):
             raise NotImplementedError
 
     def visit_List(self, node: List):
-        # TODO: Don't assume its i32
-        tb = binaryen.TypeBuilder(1)
-        tb.set_array_type(0, Int32, binaryen.type.NotPacked, True)
-        Int32ArrayHeap = tb.build()[0]
+        if not isinstance(node.parent, AnnAssign):
+            raise RuntimeError("Lists must be assigned with an annotation.")
+        array_type = get_binaryen_type(node.parent.annotation, self.object_aliases)
+        array_element_type = binaryen.type.array_type.get_element_type(array_type)
 
         elements = []
-        for el in node.elts:
-            wasm_el = super().visit(el)
-            elements.append(wasm_el)
-        return self.module.array_new_fixed(Int32ArrayHeap, elements)
+        for element in node.elts:
+            wasm_element = super().visit(element)
+            cast_element = self._cast_numeric_to_type(wasm_element, array_element_type, node.lineno)
+            elements.append(cast_element)
+            
+        return self.module.array_new_fixed(array_type, elements)
 
     # visit_Tuple
     # visit_Slice

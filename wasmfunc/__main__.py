@@ -17,6 +17,11 @@ for file in args.files:
     print(f"Compiling {file}...")
     compiler = compile_file(file, wasmgc=args.wasmgc)
 
+    compiler.module.auto_drop()
+    if not compiler.module.validate():
+        compiler.module.print()
+        raise RuntimeError("Wasm module is not valid!")
+
     if args.optimize:
         compiler.module.optimize()
 

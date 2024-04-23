@@ -3,6 +3,7 @@ import importlib.util
 import os
 import sys
 from glob import glob
+import warnings
 
 from wasmtime import Instance, Module, Store
 
@@ -13,9 +14,14 @@ def test_wasmfunc_file(path: str):
     # print(path)
     # assert 0 == 1
     # return
-    compiler = compile_file(path)
+    gc = "gc_" in path
+    compiler = compile_file(path, wasmgc=gc)
 
     assert compiler.module.validate()
+
+    if gc and compiler.module.validate():
+        warnings.warn("Test file uses WasmGC, cannot validate output")
+        return
 
     # Instantiate wasm runtime
     wasm_store = Store()
