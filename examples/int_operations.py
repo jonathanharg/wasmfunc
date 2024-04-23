@@ -1,4 +1,4 @@
-from wasmfunc import i32, wasmfunc
+from wasmfunc import i32, wasmfunc, f64
 
 
 @wasmfunc
@@ -25,6 +25,10 @@ def division() -> i32:
 def remainder() -> i32:
     return 7 % 3  # Modulus
 
+@wasmfunc
+def bidmas() ->f64:
+    x: f64 = (3 + 4 * 5) * 200 // (2 * (6 - 2) + 1)
+    return x
 
 # @wasmfunc
 # def exponentiation() -> i32:
@@ -35,3 +39,4 @@ testinputs_subtraction = [()]
 testinputs_multiplication = [()]
 testinputs_division = [()]
 testinputs_remainder = [()]
+testinputs_bidmas = [()]
