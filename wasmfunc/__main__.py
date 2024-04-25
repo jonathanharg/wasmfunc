@@ -75,10 +75,11 @@ def main():
                 execute_wasm_binary_with_deno(args.file, args.function, args.arguments)
             )
         else:
+            arguments = list(map(float, args.arguments))
             store = Store()
             module = Module.from_file(store.engine, args.file)
             instance = Instance(store, module, [])
-            print(instance.exports(store)[args.function](store, *args.arguments))
+            print(instance.exports(store)[args.function](store, *arguments))
     else:
         parser.print_help()
 

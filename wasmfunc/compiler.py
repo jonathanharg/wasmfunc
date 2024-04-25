@@ -784,24 +784,12 @@ class Compiler(NodeVisitor):
             case Div():
                 match op_type:
                     case binaryen.type.Int32:
-                        left_float = self._cast_numeric_to_type(
-                            left, binaryen.type.Float32, node.lineno
-                        )
-                        right_float = self._cast_numeric_to_type(
-                            left, binaryen.type.Float32, node.lineno
-                        )
                         return self.module.binary(
-                            binaryen.operations.DivFloat32(), left_float, right_float
+                            binaryen.operations.DivSInt32(), cast_left, cast_right
                         )
                     case binaryen.type.Int64:
-                        left_float = self._cast_numeric_to_type(
-                            left, binaryen.type.Float64, node.lineno
-                        )
-                        right_float = self._cast_numeric_to_type(
-                            left, binaryen.type.Float64, node.lineno
-                        )
                         return self.module.binary(
-                            binaryen.operations.DivFloat64(), left_float, right_float
+                            binaryen.operations.DivSInt64(), cast_left, cast_right
                         )
                     case binaryen.type.Float32:
                         return self.module.binary(
@@ -825,49 +813,16 @@ class Compiler(NodeVisitor):
             case FloorDiv():
                 # NOTE: Python has strange floor division because of PEP 238
                 # In python: a // b == floor(a/b)
-                match op_type:
-                    case binaryen.type.Int32:
-                        left_float = self._cast_numeric_to_type(
-                            left, binaryen.type.Float32, node.lineno
-                        )
-                        right_float = self._cast_numeric_to_type(
-                            right, binaryen.type.Float32, node.lineno
-                        )
-                        result = self.module.binary(
-                            binaryen.operations.DivFloat32(), left_float, right_float
-                        )
-                        return self.module.unary(
-                            binaryen.operations.FloorFloat32(), result
-                        )
-                    case binaryen.type.Int64:
-                        left_float = self._cast_numeric_to_type(
-                            left, binaryen.type.Float64, node.lineno
-                        )
-                        right_float = self._cast_numeric_to_type(
-                            right, binaryen.type.Float64, node.lineno
-                        )
-                        result = self.module.binary(
-                            binaryen.operations.DivFloat64(), left_float, right_float
-                        )
-                        return self.module.unary(
-                            binaryen.operations.FloorFloat64(), result
-                        )
-                    case binaryen.type.Float32:
-                        result = self.module.binary(
-                            binaryen.operations.DivFloat32(), cast_left, cast_right
-                        )
-                        return self.module.unary(
-                            binaryen.operations.FloorFloat32(), result
-                        )
-                    case binaryen.type.Float64:
-                        result = self.module.binary(
-                            binaryen.operations.DivFloat64(), cast_left, cast_right
-                        )
-                        return self.module.unary(
-                            binaryen.operations.FloorFloat64(), result
-                        )
-                    case _:
-                        raise RuntimeError("Can't multiply non numeric wasm types")
+                left_float = self._cast_numeric_to_type(
+                    left, binaryen.type.Float64, node.lineno
+                )
+                right_float = self._cast_numeric_to_type(
+                    right, binaryen.type.Float64, node.lineno
+                )
+                result = self.module.binary(
+                    binaryen.operations.DivFloat64(), left_float, right_float
+                )
+                return self.module.unary(binaryen.operations.FloorFloat64(), result)
             case (
                 MatMult() | Pow() | LShift() | RShift() | BitOr() | BitXor() | BitAnd()
             ):
