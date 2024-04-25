@@ -1,22 +1,22 @@
 from wasmfunc import f32, f64, i32, i64, wasmfunc
 
 
-@wasmfunc
+@wasmfunc()
 def division_i32(x: i32, y: i32) -> i32:
     return x // y
 
 
-@wasmfunc
+@wasmfunc()
 def division_i64(x: i64, y: i64) -> i64:
     return x // y
 
 
-@wasmfunc
+@wasmfunc()
 def division_f32(x: f32, y: f32) -> f32:
     return x // y
 
 
-@wasmfunc
+@wasmfunc()
 def division_f64(x: f64, y: f64) -> f64:
     return x // y
 

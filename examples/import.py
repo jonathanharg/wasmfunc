@@ -5,12 +5,12 @@ from wasmfunc import wasmfunc as f, i32 as l  # isort: skip
 # fmt: on
 
 
-@p.wasmfunc
+@p.wasmfunc()
 def add(x: p.i32, y: l) -> p.i32:
     return x + y
 
 
-@f
+@f()
 def addTen(x: p.i32) -> p.i32:
     return x + 10
 

@@ -1,7 +1,7 @@
 from wasmfunc import f64, wasmfunc
 
 
-@wasmfunc
+@wasmfunc()
 def toosimple(n: f64) -> f64:
     sum: f64 = 0.0
     flip: f64 = -1.0

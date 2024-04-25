@@ -2,7 +2,7 @@ from wasmfunc import i32, wasmfunc
 
 
 # NOTE: Works up until n = 47
-@wasmfunc
+@wasmfunc()
 def fib_recursive(n: i32) -> i32:
     if n <= 1:
         return n
@@ -13,7 +13,7 @@ def fib_recursive(n: i32) -> i32:
 testinputs_fib_recursive = [(4,), (0,), (1,), (10,), (-1,)]
 
 
-@wasmfunc
+@wasmfunc()
 def fib_loop(n: i32) -> i32:
     if n <= 1:
         return 0

@@ -1,38 +1,38 @@
 from wasmfunc import array, f32, i32, i64, wasmfunc
 
 
-@wasmfunc
+@wasmfunc()
 def create() -> i32:
     arr: array[i32] = [5, 4, 3, 2, 1]
     return arr[0]
 
 
-@wasmfunc
+@wasmfunc()
 def edit() -> i32:
     arr2: array[i32] = [5, 4, 3, 2, 1]
     arr2[1] = 0
     return arr2[1]
 
 
-@wasmfunc
+@wasmfunc()
 def list_range(start: i32, stop: i32, step: i32, index: i32) -> i32:
     arr: array[i32] = list(range(start, stop, step))
     return arr[index]
 
 
-@wasmfunc
+@wasmfunc()
 def list_lens(start: i32, stop: i32, step: i32, index: i32) -> i32:
     arr: array[i32] = list(range(start, stop, step))
     return len(arr)
 
 
-# @wasmfunc
+# @wasmfunc()
 # def copy() -> i32:
 #     original: array[i32] = [5, 4, 3, 2, 1]
 #     copy = original[:]
 #     return original[0]
 
-# @wasmfunc
+# @wasmfunc()
 # def remove() -> i32:
 #     arr = [5, 4, 3, 2, 1]
 #     del arr[0]

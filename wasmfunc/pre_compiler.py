@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from ast import (
     Attribute,
+    Call,
     FunctionDef,
     Import,
     ImportFrom,
@@ -79,6 +80,23 @@ def handle_ImportFrom(node: ImportFrom, object_aliases: dict[str, str]):
     return
 
 
+def does_contain_wasm(
+    node: FunctionDef, object_aliases: dict[str, str], module_aliases: list[str]
+):
+    contains_wasm = False
+    for decorator in node.decorator_list:
+        match decorator:
+            case Call(
+                func=Attribute(attr="wasmfunc", value=Name())
+            ) if decorator.func.value.id in module_aliases:
+                contains_wasm = True
+                break
+            case Call(func=Name()) if object_aliases[decorator.func.id] == "wasmfunc":
+                contains_wasm = True
+                break
+    return contains_wasm
+
+
 class PreCompiler(NodeVisitor):
     def __init__(self) -> None:
         self.module_aliases = []
@@ -91,17 +109,9 @@ class PreCompiler(NodeVisitor):
 
     def visit_FunctionDef(self, node: FunctionDef):
         """Check if function has the binaryen decorator @binaryen.wasmfunc"""
-        contains_wasm = False
-        for decorator in node.decorator_list:
-            match decorator:
-                case Attribute(
-                    value=Name(), attr="wasmfunc"
-                ) if decorator.value.id in self.module_aliases:
-                    contains_wasm = True
-                    break
-                case Name() if self.object_aliases[decorator.id] == "wasmfunc":
-                    contains_wasm = True
-                    break
+        contains_wasm = does_contain_wasm(
+            node, self.object_aliases, self.module_aliases
+        )
 
         if not contains_wasm:
             return

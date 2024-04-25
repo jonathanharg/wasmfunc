@@ -1,7 +1,7 @@
 # from wasmfunc import i32, wasmfunc, string
 
 
-# @wasmfunc
+# @wasmfunc()
 # def create() -> i32:
 #     arr: string = "Hello Wasm!"
 #     return 0
