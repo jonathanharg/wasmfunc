@@ -27,6 +27,7 @@ from ast import (
     Gt,
     GtE,
     If,
+    IfExp,
     Import,
     ImportFrom,
     In,
@@ -907,12 +908,30 @@ class Compiler(NodeVisitor):
                             "Can't do unary subtraction on non numeric wasm types"
                         )
             case Not():
-                raise NotImplementedError
+                zero = self.module.i32(0)
+                zero = self._cast_numeric_to_type(zero, op_type, node.lineno)
+                if op_type == Int32:
+                    op = binaryen.operations.SubInt32()
+                elif op_type == Int64:
+                    op = binaryen.operations.SubInt64()
+                else:
+                    raise RuntimeError
+                return self.module.binary(op, zero, value)
             case Invert():
                 raise NotImplementedError
 
     # visit_Lambda
     # visit_IfExp
+
+    def visit_IfExp(self, node: IfExp):
+        if self.func_ref is None:
+            return None
+
+        condition = self.visit(node.test)
+        if_true = self.visit(node.body)
+        if_false = self.visit(node.orelse)
+        return self.module.select(condition, if_true, if_false, binaryen.type.Auto)
+
     # visit_Dict
     # visit_Set
     # visit_ListComp
@@ -1071,7 +1090,7 @@ class Compiler(NodeVisitor):
         if isinstance(node.value, str):
             return self.module.string_const(node.value.encode("ascii"))
         if isinstance(node.value, int):
-            value = binaryen.literal.int64(node.value)
+            value = binaryen.literal.int32(node.value)
             return self.module.const(value)
         if isinstance(node.value, float):
             value = binaryen.literal.float64(node.value)

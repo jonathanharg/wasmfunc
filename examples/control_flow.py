@@ -48,4 +48,23 @@ def if_else(x: i32) -> i32:
     return a
 
 
+@wasmfunc()
+def if_exp(x: i32) -> i32:
+    # y: i32 = 1 if x > 0 else 0
+    y: i32 = 1 if x > 42 else x - 5
+    return y
+
+
+@wasmfunc()
+def while_true() -> i32:
+    x = 0
+    while x > 10:
+        x += 1
+        if x == 10:
+            # return x
+            break
+    return x
+
+
 testinputs_if_else = [(1,), (-5,), (8,)]
+testinputs_if_exp = [(1,), (-5,), (8,), (55,), (545,)]

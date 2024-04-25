@@ -20,5 +20,5 @@
 
   const output = instance.exports[funcName](...funcArgs);
 
-  console.log(output);
+  console.log(Number(output));
 })();

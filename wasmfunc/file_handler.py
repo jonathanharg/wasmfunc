@@ -59,43 +59,49 @@ def generate_output_name(input_path: str, binary=True):
     return os.path.split(path)[-1]
 
 
+def execute_wasm_binary_with_deno(file, function, arguments):
+    js_path = Path(__file__).parent.joinpath("runWasmGC.js")
+    command = [
+        "deno",
+        "run",
+        "-A",
+        "--v8-flags=--experimental-wasm-stringref",
+        str(js_path),
+        file,
+        function,
+        *arguments,
+    ]
+    command = list(map(str, command))
+
+    result = subprocess.run(command, stdout=subprocess.PIPE)
+
+    if result.returncode != 0:
+        print(result.stdout)
+        print(result.stderr)
+        raise RuntimeError("Error in WasmGC runner output")
+
+    value = result.stdout.decode().strip()
+
+    try:
+        value = int(value)
+    except ValueError:
+        pass
+    try:
+        value = float(value)
+    except ValueError:
+        pass
+    return value
+
+
 def get_wasm_runner(compiler: Compiler, enable_gc=False):
     if enable_gc:
 
         def run_wasm_gc_func(fn_name, variables_list):
-            js_path = Path(__file__).parent.joinpath("runWasmGC.js")
             binary_name = f"./gc_runner_{compiler.filename}.wasm"
             compiler.module.write_binary(binary_name)
-            command = [
-                "deno",
-                "run",
-                "-A",
-                "--v8-flags=--experimental-wasm-stringref",
-                str(js_path),
-                binary_name,
-                fn_name,
-                *variables_list,
-            ]
-            command = list(map(str, command))
 
-            result = subprocess.run(command, stdout=subprocess.PIPE)
-
-            if result.returncode != 0:
-                print(result.stdout)
-                print(result.stderr)
-                raise RuntimeError("Error in WasmGC runner output")
-
+            value = execute_wasm_binary_with_deno(binary_name, fn_name, variables_list)
             os.remove(binary_name)
-
-            value = result.stdout.decode().strip()
-            try:
-                value = int(value)
-            except ValueError:
-                pass
-            try:
-                value = float(value)
-            except ValueError:
-                pass
 
             return value
 
