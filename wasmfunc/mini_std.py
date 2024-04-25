@@ -1,7 +1,9 @@
-from ast import AnnAssign, Call, Name, Constant
+from ast import AnnAssign, Call, Name
 from typing import TYPE_CHECKING
-from .pre_compiler import get_binaryen_type
+
 import binaryen
+
+from .pre_compiler import get_binaryen_type
 
 if TYPE_CHECKING:
     from .compiler import Compiler
@@ -10,6 +12,9 @@ if TYPE_CHECKING:
 
 
 def list(compiler: "Compiler", node: Call):
+    if not compiler.gc:
+        raise RuntimeError("Enable Garbage Collection with the -gc flag to use arrays")
+
     if node.args.__len__() != 1:
         raise RuntimeError
 
@@ -137,10 +142,11 @@ def list(compiler: "Compiler", node: Call):
 
 
 def len(compiler: "Compiler", node: Call):
+    if not compiler.gc:
+        raise RuntimeError("Enable Garbage Collection with the -gc flag to use arrays")
+
     if node.args.__len__() != 1:
         raise RuntimeError
-
-    mod = compiler.module
 
     match node.func:
         case Name(id="len"):

@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import ast
 from ast import (
     AST,
     Add,
@@ -43,6 +44,7 @@ from ast import (
     Mult,
     Name,
     NodeTransformer,
+    NodeVisitor,
     Not,
     NotEq,
     NotIn,
@@ -59,7 +61,6 @@ from ast import (
     USub,
     While,
 )
-import ast
 
 import binaryen
 
@@ -73,13 +74,14 @@ Float32 = binaryen.type.Float32
 Float64 = binaryen.type.Float64
 
 
-class Compiler(NodeTransformer):
+class Compiler(NodeVisitor):
     def __init__(
         self,
         filename: str,
         function_arguments: dict[str, BinaryenType],
         function_return: dict[str, BinaryenType],
         enable_gc=False,
+        enable_str=False,
     ) -> None:
         self.filename = filename
         self.module = binaryen.Module()
@@ -98,12 +100,20 @@ class Compiler(NodeTransformer):
 
         self.while_stack = [0]
 
+        if enable_str:
+            enable_gc = True
+
         if enable_gc:
             print("Warning: using WasmGC, this is experimental")
             self.module.set_feature(
                 binaryen.Feature.GC | binaryen.Feature.ReferenceTypes
             )
 
+        if enable_str:
+            print("Warning: using Strings, this is also experimental")
+
+        self.gc = enable_gc
+        self.str = enable_str
         super().__init__()
 
     def _create_local(self, name: str, var_type: BinaryenType) -> int:
@@ -281,7 +291,11 @@ class Compiler(NodeTransformer):
         if type_annotation is None:
             type_annotation = value.get_type()
 
-        if not binaryen.type.heap_type.is_basic(type_annotation):
+        if (
+            not binaryen.type.heap_type.is_basic(type_annotation)
+            and not self.str
+            and self.gc
+        ):
             type_annotation = binaryen.type.from_heap_type(type_annotation, True)
 
         local_id = self._create_local(name, type_annotation)
@@ -296,7 +310,7 @@ class Compiler(NodeTransformer):
         super().generic_visit(node)
 
     def visit(self, node):
-        # print(f"Visiting: {node}")
+        print(f"Visiting: {node}")
         return super().visit(node)
 
     # visit_Expression
@@ -381,7 +395,7 @@ class Compiler(NodeTransformer):
 
     def visit_Return(self, node: Return):
         if self.func_ref is None:
-            raise NotImplementedError
+            return None
 
         value = self.visit(node.value) if node.value is not None else None
 
@@ -401,8 +415,6 @@ class Compiler(NodeTransformer):
                 raise RuntimeError(
                     f'Cannot modify the value of a WebAssembly global outside of a WebAssembly function. "{self.filename}", line {node.lineno}.'
                 )
-
-            # Globals need an annotation
             return
 
         value = self.visit(node.value)
@@ -418,6 +430,10 @@ class Compiler(NodeTransformer):
                     name = target.id
                     expressions.append(self._set_var(name, value, target.lineno))
                 case Subscript(value=Name()):
+                    if not self.gc:
+                        raise RuntimeError(
+                            "Enable Garbage Collection with the -gc flag to use arrays"
+                        )
                     # Assume its a list
                     name = target.value.id
 
@@ -453,10 +469,14 @@ class Compiler(NodeTransformer):
     # visit_TypeAlias
 
     def visit_AugAssign(self, node: AugAssign):
+        if self.func_ref is None:
+            return None
+
         if not isinstance(node.target, Name):
             raise NotImplementedError(
                 "Probably aug-assigning with subscript or dot notation. Not currently supported."
             )
+
         load_target = Name(id=node.target.id, ctx=Load())
         operation = BinOp(
             left=load_target, op=node.op, right=node.value, lineno=node.lineno
@@ -509,17 +529,9 @@ class Compiler(NodeTransformer):
                 f'Unknown Wasm type. "{self.filename}", line {node.lineno}.'
             )
 
-        name = node.target.id
         if node.value is None:
             raise RuntimeError(
                 f'A variable must be initialised to a value. "{self.filename}", line {node.lineno}.'
-            )
-
-        value = self.visit(node.value)
-        type_annotation = get_binaryen_type(node.annotation, self.object_aliases)
-        if type_annotation is None:
-            raise RuntimeError(
-                f'Unknown Wasm type. "{self.filename}", line {node.lineno}.'
             )
 
         value = self.visit(node.value)
@@ -533,7 +545,7 @@ class Compiler(NodeTransformer):
 
     def visit_While(self, node: While):
         if self.func_ref is None:
-            raise NotImplementedError
+            return None
 
         loop_condition = self.visit(node.test)
 
@@ -577,8 +589,7 @@ class Compiler(NodeTransformer):
 
     def visit_If(self, node: If):
         if self.func_ref is None:
-            # raise NotImplementedError
-            return
+            return None
 
         condition = self.visit(node.test)
 
@@ -603,6 +614,9 @@ class Compiler(NodeTransformer):
     # visit_TryStar
 
     def visit_Assert(self, node: Assert):
+        if self.func_ref is None:
+            return None
+
         if node.msg is not None:
             raise RuntimeError("Assertion messages are not supported")
 
@@ -680,6 +694,9 @@ class Compiler(NodeTransformer):
 
     # visit_Nonlocal
     def visit_Expr(self, node: Expr):
+        if self.func_ref is None:
+            return None
+
         value = self.visit(node.value)
         assert isinstance(value, binaryen.Expression)
         if value.get_type() != binaryen.type.TypeNone:
@@ -687,9 +704,15 @@ class Compiler(NodeTransformer):
         return value
 
     def visit_Pass(self, _: Pass):
+        if self.func_ref is None:
+            return None
+
         return self.module.nop()
 
     def visit_Break(self, _: Break):
+        if self.func_ref is None:
+            return None
+
         if len(self.while_stack) == 0:
             raise RuntimeError("Break can only be used in a while loop")
         loop_id = self.while_stack[-1]
@@ -697,6 +720,9 @@ class Compiler(NodeTransformer):
         return self.module.Break(loop_name, None, None)
 
     def visit_Continue(self, _: Continue):
+        if self.func_ref is None:
+            return None
+
         if len(self.while_stack) == 0:
             raise RuntimeError("Break can only be used in a while loop")
         loop_id = self.while_stack[-1]
@@ -708,7 +734,7 @@ class Compiler(NodeTransformer):
 
     def visit_BinOp(self, node: BinOp):
         if self.func_ref is None:
-            raise NotImplementedError
+            return None
 
         left = self.visit(node.left)
         right = self.visit(node.right)
@@ -852,6 +878,9 @@ class Compiler(NodeTransformer):
                 raise NotImplementedError
 
     def visit_UnaryOp(self, node: UnaryOp):
+        if self.func_ref is None:
+            return None
+
         value = self.visit(node.operand)
         op_type = value.get_type()
         match node.op:
@@ -899,7 +928,7 @@ class Compiler(NodeTransformer):
 
     def visit_Compare(self, node: Compare):
         if self.func_ref is None:
-            raise NotImplementedError
+            return None
 
         if len(node.comparators) > 1 or len(node.ops) > 1:
             # TODO: Supported chained comparisons
@@ -1005,7 +1034,8 @@ class Compiler(NodeTransformer):
         return self.module.binary(op, cast_left, cast_right)
 
     def visit_Call(self, node: Call):
-        assert self.func_ref is not None
+        if self.func_ref is None:
+            return None
 
         if len(node.keywords) > 0:
             raise NotImplementedError("wasmfunc does not support keyword arguments!")
@@ -1037,10 +1067,11 @@ class Compiler(NodeTransformer):
     # visit_JoinedStr
 
     def visit_Constant(self, node: Constant):
+        if self.func_ref is None:
+            return None
         if node.value is None:
             raise NotImplementedError
         if isinstance(node.value, str):
-            # TODO: Don't ascii encode
             return self.module.string_const(node.value.encode("ascii"))
         if isinstance(node.value, int):
             value = binaryen.literal.int64(node.value)
@@ -1055,6 +1086,13 @@ class Compiler(NodeTransformer):
     # visit_Attribute
 
     def visit_Subscript(self, node: Subscript):
+        if self.func_ref is None:
+            return None
+        if not self.gc:
+            raise RuntimeError(
+                "Enable Garbage Collection with the -gc flag to use arrays"
+            )
+
         value = self.visit(node.value)
         if not isinstance(value, binaryen.Expression):
             raise RuntimeError("Expected Binaryen Expression for subscript value")
@@ -1089,9 +1127,8 @@ class Compiler(NodeTransformer):
     # visit_Starred
 
     def visit_Name(self, node: Name):
-        # PYTHON RULE: Local -> Enclosing -> Global -> Built-in
-        # Name could be
-        # LocalSet, GlobalSet, Store?, StructSet, ArraySet
+        if self.func_ref is None:
+            return None
 
         if isinstance(node.ctx, Load):
             if node.id in self.variable_types:
@@ -1111,6 +1148,13 @@ class Compiler(NodeTransformer):
             raise NotImplementedError
 
     def visit_List(self, node: List):
+        if self.func_ref is None:
+            return None
+        if not self.gc:
+            raise RuntimeError(
+                "Enable Garbage Collection with the -gc flag to use arrays"
+            )
+
         if not isinstance(node.parent, AnnAssign):
             raise RuntimeError("Lists must be assigned with an annotation.")
         array_type = get_binaryen_type(node.parent.annotation, self.object_aliases)
@@ -1130,6 +1174,8 @@ class Compiler(NodeTransformer):
     # visit_Slice
 
     def generic_visit(self, node):
+        if self.func_ref is None:
+            return None
         raise RuntimeError(
             f"Node of type {node.__class__.__name__} is not supported by wasmfunc. Line number {node.lineno if hasattr(node, 'lineno') else '?'}"
         )

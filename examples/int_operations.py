@@ -1,4 +1,4 @@
-from wasmfunc import i32, wasmfunc, f64
+from wasmfunc import f64, i32, wasmfunc
 
 
 @wasmfunc
@@ -25,10 +25,12 @@ def division() -> i32:
 def remainder() -> i32:
     return 7 % 3  # Modulus
 
+
 @wasmfunc
-def bidmas() ->f64:
+def bidmas() -> f64:
     x: f64 = (3 + 4 * 5) * 200 // (2 * (6 - 2) + 1)
     return x
+
 
 # @wasmfunc
 # def exponentiation() -> i32:

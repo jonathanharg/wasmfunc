@@ -1,6 +1,9 @@
+[build-system]
+requires = ["setuptools>=61.2", "wheel"]
+
 [project]
 name = "wasmfunc"
-version = "0.0.1"
+version = "0.0.1a1"
 description = "A WebAssembly compiler for Python"
 authors = [
     {name = "Jonathan Hargreaves", email = "jhargreaves189@gmail.com"},
@@ -24,11 +27,19 @@ license = { file = "LICENSE" }
 requires-python = ">=3.12"
 dependencies = [
     'binaryen.py >= 117.1.0',
+    'wasmtime'
 ]
 
 [project.urls]
 "Source Code" = "https://github.com/jonathanharg/wasmfunc"
 Issues = "https://github.com/jonathanharg/wasmfunc/issues"
 
+[project.scripts]
+wasmfunc = "wasmfunc.__main__:main"
+
 [project.optional-dependencies]
-dev = ["black", "isort", "wasmtime","pytest", "build"]
+dev = ["black", "isort", "pytest", "build"]
+
+[tool.setuptools.packages.find]
+include = ["wasmfunc"]
+exclude = ["tests", "examples"]

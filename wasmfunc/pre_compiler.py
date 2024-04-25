@@ -30,6 +30,8 @@ def get_binaryen_type(node: expr | None, object_aliases: dict[str, str]):
     match node:
         case None:
             return None
+        case Name(id="string"):
+            return binaryen.type.Stringref
         case Name():
             type_name = object_aliases[node.id]
             assert isinstance(type_name, str)

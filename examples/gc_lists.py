@@ -1,4 +1,4 @@
-from wasmfunc import i32, wasmfunc, i64, array, f32
+from wasmfunc import array, f32, i32, i64, wasmfunc
 
 
 @wasmfunc
