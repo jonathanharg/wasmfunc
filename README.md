@@ -25,8 +25,8 @@ def fib_recursive(n: i32) -> i32:
 Then compile with
 
 ```bash
-wasmfunc fib.py
-# Or python -m wasmfunc fib.py
+wasmfunc compile fib.py
+# Or python -m wasmfunc compile fib.py
 ```
 
 For more examples see [examples](examples/).
