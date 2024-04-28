@@ -3,7 +3,7 @@ requires = ["setuptools>=61.2", "wheel"]
 
 [project]
 name = "wasmfunc"
-version = "0.0.1rc1"
+version = "0.0.1"
 description = "A WebAssembly compiler for Python"
 authors = [
     {name = "Jonathan Hargreaves", email = "jhargreaves189@gmail.com"},
