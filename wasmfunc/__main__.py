@@ -28,6 +28,14 @@ def main():
         help="Enable experimental garbage collection with WasmGC (default: False)",
     )
     compile_parser.add_argument(
+        "-s",
+        "--enable-strings",
+        dest="strings",
+        default=False,
+        action="store_true",
+        help="Enable experimental string support with WasmGC (default: False)",
+    )
+    compile_parser.add_argument(
         "-no",
         "--no-optimisations",
         dest="optimise",
@@ -54,7 +62,7 @@ def main():
     if args.command == "compile":
         file = args.file
         print(f"Compiling {file}...")
-        compiler = compile_file(file, enable_gc=args.wasmgc)
+        compiler = compile_file(file, enable_gc=args.wasmgc, enable_str=args.strings)
 
         if args.optimise:
             compiler.module.optimize()

@@ -106,9 +106,6 @@ class Compiler(NodeVisitor):
 
         self.while_stack = [0]
 
-        if enable_str:
-            enable_gc = True
-
         if enable_gc:
             print("Warning: using WasmGC, this is experimental")
             self.module.set_feature(
@@ -116,7 +113,13 @@ class Compiler(NodeVisitor):
             )
 
         if enable_str:
-            print("Warning: using Strings, this is also experimental")
+            self.module.set_feature(
+                binaryen.Feature.GC
+                | binaryen.Feature.ReferenceTypes
+                | binaryen.Feature.Strings
+            )
+            enable_gc = True
+            print("Warning: using Strings, this is experimental")
 
         self.gc = enable_gc
         self.str = enable_str
