@@ -2,6 +2,7 @@ import argparse
 import sys
 
 from wasmtime import Instance, Module, Store
+import binaryen
 
 from .file_handler import (
     compile_file,
@@ -41,7 +42,7 @@ def main():
         dest="optimise",
         default=True,
         action="store_false",
-        help="Disable optimizations (default: True)",
+        help="Disable optimizations (default: False)",
     )
 
     exec_parser = subparsers.add_parser("exec", help="Execute a file")
@@ -77,6 +78,7 @@ def main():
             wat_filename = generate_output_name(file, False)
             compiler.module.write_text(wat_filename)
             print(f"Written {wat_filename}")
+            binaryen.lib.BinaryenModulePrintStackIR(compiler.module.ref, False)
     elif args.command == "exec":
         if args.wasmgc:
             print(
